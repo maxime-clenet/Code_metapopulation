@@ -12,7 +12,7 @@ e_0 = 0.1  # Baseline extinction rate
 z = 1  # Extinction exponent
 beta = 1  # Emmigration exponent
 alpha = 0.1  # Example value for alpha
-p = 0.5  # Probability of edge creation in Erdős-Rényi graph
+p = 0.2  # Probability of edge creation in Erdős-Rényi graph
 T = 1000  # Time steps
 
 # Generate random areas for each patch
@@ -37,10 +37,10 @@ np.fill_diagonal(adjacency_matrix, 0)
 # Incorporate the adjacency matrix into the connectivity matrix S
 S *= adjacency_matrix
 
-# Normalize S so that each row sums to 1, avoiding division by zero
-row_sums = S.sum(axis=1, keepdims=True)
-row_sums[row_sums == 0] = 1  # Prevent division by zero
-S /= row_sums
+# # Normalize S so that each row sums to 1, avoiding division by zero
+# row_sums = S.sum(axis=1, keepdims=True)
+# row_sums[row_sums == 0] = 1  # Prevent division by zero
+# S /= row_sums
 
 # Initialize a matrix P with zeros, of size n x T
 P = np.zeros((n, T))

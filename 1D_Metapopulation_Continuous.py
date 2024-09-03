@@ -33,7 +33,7 @@ alpha = 0.1  # Example value for alpha
 S = A[:, np.newaxis]**beta * np.exp(-alpha * distances)
 
 # Generate an Erdős-Rényi graph
-p = 0.5  # Probability of edge creation
+p = 0.1  # Probability of edge creation
 G = nx.erdos_renyi_graph(n, p, seed=42)
 
 # Convert the graph to an adjacency matrix
@@ -45,10 +45,10 @@ np.fill_diagonal(adjacency_matrix, 0)
 # Incorporate the adjacency matrix into the connectivity matrix S
 S = S * adjacency_matrix
 
-# Normalize S so that each row sums to 1, avoiding division by zero
-row_sums = S.sum(axis=1, keepdims=True)
-row_sums[row_sums == 0] = 1  # Prevent division by zero
-S = S / row_sums
+# # Normalize S so that each row sums to 1, avoiding division by zero
+# row_sums = S.sum(axis=1, keepdims=True)
+# row_sums[row_sums == 0] = 1  # Prevent division by zero
+# S = S / row_sums
 
 print(S)
 # Time steps
