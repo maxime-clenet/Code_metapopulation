@@ -1,7 +1,7 @@
 import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
-
+#
 def generate_matrices(n, c, e_0, z, beta, T, scenario_func):
     np.random.seed(42)
     
