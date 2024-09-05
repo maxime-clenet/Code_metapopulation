@@ -24,6 +24,8 @@ def generate_matrices(n, c, e_0, z, beta, T, scenario_func, adjacency_matrices, 
                 q[i] *= (1 - c * S[j, i] * P[j, k])
         
         P[:, k + 1] = 1 - (1 - (1 - e) * P[:, k]) * q
+
+        P[:, k + 1][P[:, k + 1] < 10**-4] = 0
     
     return P, supra_adjacency_matrix
 
@@ -119,11 +121,11 @@ adjacency_matrices = np.stack([adjacency_matrix_1, adjacency_matrix_2, adjacency
 
 
 # Vary the colonization rate from 0.1 to 1
-colonization_rates = np.linspace(0.05, 0.5, 10)
+colonization_rates = np.linspace(0.05, 0.7, 30)
 #colonization_rates = np.array([0.25])
 
 # Different values of T
-T_values = [2100]
+T_values = [1000]
 
 # Store results for plotting
 results = {}
@@ -146,7 +148,7 @@ plt.figure(figsize=(12, 8))
 for T in T_values:
     max_eigenvalues, sum_probabilities = results[T]
     plt.plot(colonization_rates, max_eigenvalues, marker='o', label=f'Max Eigenvalue (T={T})')
-    plt.plot(colonization_rates, sum_probabilities, marker='x', linestyle='--', label=f'Sum of Probabilities (T={T})')
+    plt.plot(colonization_rates, sum_probabilities, marker='x', linestyle='--', label=f'Mean of Probabilities (T={T})')
 
     # Add vertical dashed lines where max eigenvalue crosses 1
     for i in range(1, len(max_eigenvalues)):
@@ -154,7 +156,7 @@ for T in T_values:
             plt.axvline(x=colonization_rates[i], color='gray', linestyle='--')
 plt.xlabel('Colonization Rate')
 plt.ylabel('Value')
-plt.title('Max Eigenvalue of Product Matrix and Sum of Probabilities vs. Colonization Rate')
+plt.title('Max Eigenvalue of Product Matrix and Mean of Probabilities vs. Colonization Rate')
 plt.legend()
 plt.grid(True)
 plt.show()
