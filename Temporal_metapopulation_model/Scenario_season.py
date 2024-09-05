@@ -2,7 +2,7 @@ import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
 
-def generate_matrices(n, c, e_0, z, beta, T, scenario_func):
+def generate_matrices(n, c, e_0, z, beta, T, scenario_func, adjacency_matrices, distances, alpha, A):
     np.random.seed(42)
     
     # Initialize probability matrix P
@@ -14,7 +14,7 @@ def generate_matrices(n, c, e_0, z, beta, T, scenario_func):
 
     for k in range(T-1):
         # Use the scenario function to get S and e
-        S, e = scenario_func(n, e_0, z, beta,k)
+        S, e = scenario_func(n, e_0, z, beta, k, adjacency_matrices, distances, alpha, A)
         
         supra_adjacency_matrix[k] = np.eye(n) - np.diag(e) + c * S
         
@@ -27,36 +27,39 @@ def generate_matrices(n, c, e_0, z, beta, T, scenario_func):
     
     return P, supra_adjacency_matrix
 
-def create_seasonal_network(n, e_0, z, beta, k):
-    distances = np.random.random((n, n)) * 10
-    alpha = 5
-    A = np.ones(n)
+def create_sbm_with_varied_probabilities(n, p_matrix):
+    # Number of communities
+    num_communities = len(p_matrix)
+    
+    # Sizes of each community (assuming equal sizes for simplicity)
+    sizes = [n // num_communities] * num_communities
+    
+    # Create the SBM
+    G = nx.stochastic_block_model(sizes, p_matrix, seed=42,directed = True)
+    
+    # Get the adjacency matrix
+    adjacency_matrix = nx.to_numpy_array(G)
+    
+    return adjacency_matrix
 
+
+def create_seasonal_network(n, e_0, z, beta, k, adjacency_matrices, distances, alpha, A):
     e = e_0 * A**(-z)
     S = A[:, np.newaxis]**beta * np.exp(-alpha * distances)
     
-    # Determine the season based on k
-    if (k // 200) % 2 == 0:
-        # Summer network
-        num_communities = int(np.sqrt(n))
-        p_in = 0.5
-        p_out = 0.1 / (1 )
-    else:
-        # Winter network
-        num_communities = int(np.sqrt(n))
-        p_in = 0.3
-        p_out = 0.01 / (1 )
+    # Determine the adjacency matrix based on k
+    # Define the ranges and corresponding adjacency matrices
+    ranges = [(0, 200), (200, 250), (250, 450), (450, 500)]
     
-    p_matrix = np.full((num_communities, num_communities), p_out)
-    np.fill_diagonal(p_matrix, p_in)
-    
-    G = nx.stochastic_block_model([n // num_communities] * num_communities, p_matrix, seed=42)
-    adjacency_matrix = nx.to_numpy_array(G)
+    # Determine the adjacency matrix based on k
+    for idx, (start, end) in enumerate(ranges):
+        if start <= k % 500 < end:
+            adjacency_matrix = adjacency_matrices[idx]
+            break
     np.fill_diagonal(adjacency_matrix, 0)
     S *= adjacency_matrix
     
     return S, e
-
 
 def max_eigenvalue_product_matrix(supra_adjacency_matrix):
     n = supra_adjacency_matrix.shape[1]
@@ -74,18 +77,53 @@ def max_eigenvalue_product_matrix(supra_adjacency_matrix):
     return np.max(eigenvalues)
 
 # Parameters
-n = 100
-c = 1
+n = 50
+distances = np.random.random((n, n)) * 10
+alpha = 5
+A = np.ones(n)
 e_0 = 0.1
-z = 1
-beta = 1
+z = 1.0
+beta = 1.0
+p_11 = 1
+p_22 = 0.7
+p_12 = 0.1
+p_21 = 0.1
+
+p_matrix_1 = np.array([
+    [p_11, 0],
+    [0, 0]
+])
+
+p_matrix_2 = np.array([
+    [0, p_12],
+    [0, p_22]
+])
+
+p_matrix_3 = np.array([
+    [0, 0],
+    [0, p_22]
+])
+
+p_matrix_4 = np.array([
+    [p_11, 0],
+    [p_21, 0]
+])
+
+adjacency_matrix_1 = create_sbm_with_varied_probabilities(n, p_matrix_1)
+adjacency_matrix_2 = create_sbm_with_varied_probabilities(n, p_matrix_2)
+adjacency_matrix_3 = create_sbm_with_varied_probabilities(n, p_matrix_3)
+adjacency_matrix_4 = create_sbm_with_varied_probabilities(n, p_matrix_4)
+
+# Create a tensor of adjacency matrices
+adjacency_matrices = np.stack([adjacency_matrix_1, adjacency_matrix_2, adjacency_matrix_3, adjacency_matrix_4])
 
 
 # Vary the colonization rate from 0.1 to 1
 colonization_rates = np.linspace(0.05, 0.5, 10)
+#colonization_rates = np.array([0.25])
 
 # Different values of T
-T_values = [1000]
+T_values = [2100]
 
 # Store results for plotting
 results = {}
@@ -95,7 +133,7 @@ for T in T_values:
     sum_probabilities = []
     
     for c in colonization_rates:
-        P, supra_adjacency_matrix = generate_matrices(n, c, e_0, z, beta, T, create_seasonal_network)
+        P, supra_adjacency_matrix = generate_matrices(n, c, e_0, z, beta, T, create_seasonal_network,adjacency_matrices, distances, alpha, A)
         max_eigenvalue = max_eigenvalue_product_matrix(supra_adjacency_matrix)
         max_eigenvalues.append(max_eigenvalue)
         sum_probabilities.append(np.mean(P[:, -1]))
@@ -124,8 +162,11 @@ plt.show()
 
 # Plot the probability evolution for all patches
 plt.figure(figsize=(10, 6))
-for i in range(P.shape[0]):
-    plt.plot(P[i, :])
+for i in range(n):
+    if i < n // 2:
+        plt.plot(P[i, :], color='red', label='Winter' if i == 0 else "")
+    else:
+        plt.plot(P[i, :], color='blue', label='Summer' if i == n // 2 else "")
 plt.xlabel('Time step')
 plt.ylabel('Probability')
 plt.title('Probability Evolution for All Patches')
