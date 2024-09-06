@@ -25,7 +25,7 @@ def generate_matrices(n, c, e_0, z, beta, T, scenario_func, adjacency_matrices, 
         
         P[:, k + 1] = 1 - (1 - (1 - e) * P[:, k]) * q
 
-        P[:, k + 1][P[:, k + 1] < 10**-4] = 0
+        P[:, k + 1][P[:, k + 1] < 10**-3] = 0
     
     return P, supra_adjacency_matrix
 
@@ -81,19 +81,19 @@ def max_eigenvalue_product_matrix(supra_adjacency_matrix):
 def min_eigenvalue_all_matrices(supra_adjacency_matrix):
     T_minus_1 = supra_adjacency_matrix.shape[0]
     
-    # Initialize a variable to store the maximum eigenvalue
+    # Initialize a variable to store the minimum of the maximum eigenvalues
     min_eigenvalue = np.inf
     
     for k in range(T_minus_1):
         # Compute the eigenvalues of the k-th supra-adjacency matrix
         eigenvalues = np.linalg.eig(supra_adjacency_matrix[k])[0]
-        # Update the maximum eigenvalue if a larger one is found
+        # Update the minimum eigenvalue if a smaller one is found
         min_eigenvalue = min(min_eigenvalue, np.max(eigenvalues))
     
     return min_eigenvalue
 
 # Parameters
-n = 50
+n = 200
 distances = np.random.random((n, n)) * 10
 alpha =3
 A = np.ones(n)
@@ -138,7 +138,6 @@ adjacency_matrices = np.stack([adjacency_matrix_1, adjacency_matrix_2, adjacency
 colonization_rates = np.linspace(0.05, 0.7, 30)
 #colonization_rates = np.array([0.25])
 
-# Different values of T
 T_values = [1000]
 
 # Store results for plotting
@@ -178,18 +177,4 @@ plt.ylabel('Value')
 plt.title('Max Eigenvalue of Product Matrix, Mean of Probabilities, and Min Eigenvalue of All Matrices vs. Colonization Rate')
 plt.legend()
 plt.grid(True)
-plt.show()
-
-
-# Plot the probability evolution for all patches
-plt.figure(figsize=(10, 6))
-for i in range(n):
-    if i < n // 2:
-        plt.plot(P[i, :], color='red', label='Winter' if i == 0 else "")
-    else:
-        plt.plot(P[i, :], color='blue', label='Summer' if i == n // 2 else "")
-plt.xlabel('Time step')
-plt.ylabel('Probability')
-plt.title('Probability dynamics for all patches')
-plt.legend(loc='upper right', bbox_to_anchor=(1.15, 1), ncol=2)
 plt.show()
