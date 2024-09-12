@@ -55,7 +55,7 @@ for k in range(T-1):
     # Calculate the product term for all nodes using nested loops
     for i in range(n):
         for j in range(n):
-            q[i] *= (1 - c * S[j, i] * P[j, k])
+            q[i] *= (1 - c * S[j,i] * P[j, k])
     # Update the probabilities for all nodes at time k+1
     P[:, k + 1] = 1 - (1 - (1 - e) * P[:, k]) * q
 

@@ -25,7 +25,7 @@ def generate_matrices(n, c, e_0, z, beta, T, scenario_func, adjacency_matrices, 
         
         P[:, k + 1] = 1 - (1 - (1 - e) * P[:, k]) * q
 
-        P[:, k + 1][P[:, k + 1] < 10**-4] = 0
+        P[:, k + 1][P[:, k + 1] < 10**-3] = 0
     
     return P, supra_adjacency_matrix
 
@@ -51,11 +51,11 @@ def create_seasonal_network(n, e_0, z, beta, k, adjacency_matrices, distances, a
     
     # Determine the adjacency matrix based on k
     # Define the ranges and corresponding adjacency matrices
-    ranges = [(0, 200), (200, 250), (250, 450), (450, 500)]
+    ranges = [(0, 20), (20,30), (30, 50), (50, 60)]
     
     # Determine the adjacency matrix based on k
     for idx, (start, end) in enumerate(ranges):
-        if start <= k % 500 < end:
+        if start <= k % 60 < end:
             adjacency_matrix = adjacency_matrices[idx]
             break
     np.fill_diagonal(adjacency_matrix, 0)
@@ -95,15 +95,15 @@ def min_eigenvalue_all_matrices(supra_adjacency_matrix):
 # Parameters
 n = 50
 distances = np.random.random((n, n)) * 10
-alpha =3
+alpha =1
 A = np.ones(n)
-e_0 = 0.1
+e_0 = 0.08
 z = 1.0
 beta = 1.0
-p_11 = 0.6
-p_22 = 0.7
-p_12 = 0.02
-p_21 = 0.2
+p_11 = 0
+p_22 = 0
+p_12 = 1
+p_21 = 1
 
 p_matrix_1 = np.array([
     [p_11, 0],
@@ -139,7 +139,7 @@ colonization_rates = np.linspace(0.05, 0.7, 30)
 #colonization_rates = np.array([0.25])
 
 # Different values of T
-T_values = [1000]
+T_values = [1500]
 
 # Store results for plotting
 results = {}
