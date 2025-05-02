@@ -3,7 +3,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 
 # Set the seed for reproducibility
-np.random.seed(42)
+np.random.seed(32)
 
 # Number of patches
 n = 10
@@ -12,7 +12,7 @@ n = 10
 A = np.random.random(n) + 1
 
 # Generate random distances between patches
-distances = np.random.random((n, n)) * 10
+distances = np.random.random((n, n)) * 20
 
 c = 0.1
 
@@ -33,8 +33,8 @@ alpha = 0.1  # Example value for alpha
 S = A[:, np.newaxis]**beta * np.exp(-alpha * distances)
 
 # Generate an Erdős-Rényi graph
-p = 0.1  # Probability of edge creation
-G = nx.erdos_renyi_graph(n, p, seed=42)
+p = 0.2  # Probability of edge creation
+G = nx.erdos_renyi_graph(n, p)
 
 # Convert the graph to an adjacency matrix
 adjacency_matrix = nx.to_numpy_array(G)
@@ -50,9 +50,8 @@ S = S * adjacency_matrix
 # row_sums[row_sums == 0] = 1  # Prevent division by zero
 # S = S / row_sums
 
-print(S)
 # Time steps
-T = 1000
+T = 200
 
 # Initialize occupancy probabilities
 P = np.zeros((n, T))
@@ -72,9 +71,9 @@ plt.figure(figsize=(10, 6))
 for i in range(n):
     plt.plot(P[i, :], label=f'Patch {i+1}')
 
-plt.xlabel('Time step')
-plt.ylabel('Occupancy Probability')
-plt.title('Occupancy Probability Evolution for All Patches')
+plt.xlabel('Time step',fontsize = 15)
+plt.ylabel('Occupancy Probability', fontsize = 15)
+plt.title('Dynamics of the spatially realistic metapopulation model')
 plt.legend(loc='upper right', bbox_to_anchor=(1.15, 1), ncol=2)
 plt.show()
 

@@ -7,7 +7,8 @@ def generate_matrices(n, c, e_0, z, beta, T, scenario_func, adjacency_matrices, 
     
     # Initialize probability matrix P
     P = np.zeros((n, T))
-    P[:, 0] = np.random.random(n)  # Initial condition
+    for i in range(n // 2):
+        P[i, 0] = np.random.random()  # Initial condition
 
     # Initialize the supra-adjacency matrix
     supra_adjacency_matrix = np.zeros((T-1, n, n))
@@ -51,11 +52,11 @@ def create_seasonal_network(n, e_0, z, beta, k, adjacency_matrices, distances, a
     
     # Determine the adjacency matrix based on k
     # Define the ranges and corresponding adjacency matrices
-    ranges = [(0, 20), (20,30), (30, 50), (50, 60)]
+    ranges = [(0, 40), (40,80), (80, 120), (120, 160)]
     
     # Determine the adjacency matrix based on k
     for idx, (start, end) in enumerate(ranges):
-        if start <= k % 60 < end:
+        if start <= k % 160 < end:
             adjacency_matrix = adjacency_matrices[idx]
             break
     np.fill_diagonal(adjacency_matrix, 0)
@@ -97,7 +98,7 @@ n = 50
 distances = np.random.random((n, n)) * 10
 alpha =1
 A = np.ones(n)
-e_0 = 0.08
+e_0 = 0.04
 z = 1.0
 beta = 1.0
 p_11 = 0
@@ -135,11 +136,11 @@ adjacency_matrices = np.stack([adjacency_matrix_1, adjacency_matrix_2, adjacency
 
 
 # Vary the colonization rate from 0.1 to 1
-colonization_rates = np.linspace(0.05, 0.7, 30)
+colonization_rates = np.linspace(0.02, 0.5, 50)
 #colonization_rates = np.array([0.25])
 
 # Different values of T
-T_values = [1500]
+T_values = [1000]
 
 # Store results for plotting
 results = {}
@@ -164,23 +165,28 @@ plt.figure(figsize=(12, 8))
 
 for T in T_values:
     max_eigenvalues, sum_probabilities, min_eigenvalues_all_matrices = results[T]
-    plt.plot(colonization_rates, max_eigenvalues, marker='o', label=f'Max Eigenvalue (T={T})')
+    plt.plot(colonization_rates, max_eigenvalues, marker='o', label=f'Temporal metapopulation capacity')
     plt.plot(colonization_rates, sum_probabilities, marker='x', linestyle='--', label=f'Mean of Probabilities (T={T})')
-    plt.plot(colonization_rates, min_eigenvalues_all_matrices, marker='s', linestyle='-.', label=f'Min Eigenvalue of All Matrices (T={T})')
+    # plt.plot(colonization_rates, min_eigenvalues_all_matrices, marker='s', linestyle='-.', label=f'Min Eigenvalue of All Matrices (T={T})')
 
     # Add vertical dashed lines where max eigenvalue crosses 1
     for i in range(1, len(max_eigenvalues)):
         if max_eigenvalues[i-1] < 1 and max_eigenvalues[i] >= 1:
             plt.axvline(x=colonization_rates[i], color='gray', linestyle='--')
 
-plt.xlabel('Colonization Rate')
-plt.ylabel('Value')
-plt.title('Max Eigenvalue of Product Matrix, Mean of Probabilities, and Min Eigenvalue of All Matrices vs. Colonization Rate')
-plt.legend()
+plt.xlabel('Colonization Rate',fontsize = 15)
+plt.ylabel('Temporal metapopulation capacity',fontsize = 15)
+plt.title('Impact of Colonization Rate on Metapopulation Capacity',fontsize = 15)
+plt.legend(fontsize = 15)
 plt.grid(True)
 plt.show()
 
 
+
+
+c = 0.2
+P, supra_adjacency_matrix = generate_matrices(n, c, e_0, z, beta, T, create_seasonal_network, adjacency_matrices, distances, alpha, A)
+        
 # Plot the probability evolution for all patches
 plt.figure(figsize=(10, 6))
 for i in range(n):
@@ -188,8 +194,25 @@ for i in range(n):
         plt.plot(P[i, :], color='red', label='Winter' if i == 0 else "")
     else:
         plt.plot(P[i, :], color='blue', label='Summer' if i == n // 2 else "")
-plt.xlabel('Time step')
-plt.ylabel('Probability')
-plt.title('Probability dynamics for all patches')
-plt.legend(loc='upper right', bbox_to_anchor=(1.15, 1), ncol=2)
+plt.xlabel('Time step',fontsize = 15)
+plt.ylabel('Occupancy probability',fontsize = 15)
+plt.title('Dynamics for c = 0.2',fontsize = 15)
+plt.legend(loc='upper right',fontsize = 15)
+plt.show()
+
+
+c = 0.4
+P, supra_adjacency_matrix = generate_matrices(n, c, e_0, z, beta, T, create_seasonal_network, adjacency_matrices, distances, alpha, A)
+        
+# Plot the probability evolution for all patches
+plt.figure(figsize=(10, 6))
+for i in range(n):
+    if i < n // 2:
+        plt.plot(P[i, :], color='red', label='Winter' if i == 0 else "")
+    else:
+        plt.plot(P[i, :], color='blue', label='Summer' if i == n // 2 else "")
+plt.xlabel('Time step',fontsize = 15)
+plt.ylabel('Occupancy probability',fontsize = 15)
+plt.title('Dynamics for c = 0.4',fontsize = 15)
+plt.legend(loc='upper right' ,fontsize = 15)
 plt.show()
