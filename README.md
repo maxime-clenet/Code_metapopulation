@@ -1,1 +1,1 @@
-Code associated with the project: "Temporal metapopulation model".
+Code associated with the project: "Metapopulation persistence in a dynamically changing landscape".
