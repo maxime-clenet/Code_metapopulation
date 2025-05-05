@@ -1,79 +1,72 @@
 import numpy as np
-import networkx as nx
 import matplotlib.pyplot as plt
+import networkx as nx
 
-# Set the seed for reproducibility
-np.random.seed(32)
+# === PARAMETERS === #
+num_patches = 10           # Number of habitat patches
+square_size = 2            # Size of the spatial domain (2x2 square)
+c = 1.0                    # Colonization rate
+e_0 = 0.01                 # Baseline extinction rate
+alpha = 0.1                # Dispersal limitation coefficient
+z = 1                      # Extinction exponent
+max_time = 200             # Number of time steps
+p = 1                   # Edge probability for Erdős-Rényi connectivity
+seed = 42                  # Random seed
 
-# Number of patches
-n = 10
+# === INITIALIZATION === #
+np.random.seed(seed)
 
-# Generate random areas for each patch
-A = np.random.random(n) + 1
+# Generate patch locations and areas
+patch_locations = np.random.rand(num_patches, 2) * square_size
+A = np.random.uniform(1, 4, num_patches)
+A_std = A / np.sum(A)
 
-# Generate random distances between patches
-distances = np.random.random((n, n)) * 20
+# Compute Euclidean distances
+distances = np.linalg.norm(patch_locations[:, None, :] - patch_locations[None, :, :], axis=2)
+np.fill_diagonal(distances, np.inf)
 
-c = 0.1
+# Generate Erdős-Rényi graph and adjacency mask
+G = nx.erdos_renyi_graph(num_patches, p, seed=seed)
+adj_matrix = nx.to_numpy_array(G)
+np.fill_diagonal(adj_matrix, 0)
 
-# Baseline extinction rate
-e_0 = 0.1
+# === LANDSCAPE MATRIX (for capacity, sparsified) === #
+A_i = A_std[:, None]
+A_j = A_std[None, :]
+landscape_matrix = A_i * A_j * np.exp(-alpha * distances)
+np.fill_diagonal(landscape_matrix, 0)
+landscape_matrix *= adj_matrix  # Apply sparsity constraint
 
-# Extinction exponent
-z = 1  # You can adjust this value as needed
+# Metapopulation capacity (leading eigenvalue)
+lambda_M = np.max(np.linalg.eigvals(landscape_matrix).real)
+print(f"Metapopulation capacity (λ_M): {lambda_M:.4f}")
 
-# Extinction rate for each patch, inversely proportional to area with exponent
-e = e_0 * A**(-z)
+# === EXTINCTION RATES === #
+extinction_rates = e_0 * A_std ** (-z)
 
-# Immigration exponent
-beta = 1  # You can adjust this value as needed
+# === CONNECTIVITY MATRIX (used in dynamics) === #
+S = A_std[None, :] * np.exp(-alpha * distances)
+np.fill_diagonal(S, 0)
+S *= adj_matrix  # Apply same graph constraint
 
-# Connectivity matrix (dispersal success between patches)
-alpha = 0.1  # Example value for alpha
-S = A[:, np.newaxis]**beta * np.exp(-alpha * distances)
+# === SIMULATION === #
+P = np.zeros((num_patches, max_time))
+P[:, 0] = np.random.rand(num_patches)
 
-# Generate an Erdős-Rényi graph
-p = 0.2  # Probability of edge creation
-G = nx.erdos_renyi_graph(n, p)
-
-# Convert the graph to an adjacency matrix
-adjacency_matrix = nx.to_numpy_array(G)
-
-# Ensure the diagonal is 0 (each patch is not connected to itself)
-np.fill_diagonal(adjacency_matrix, 0)
-
-# Incorporate the adjacency matrix into the connectivity matrix S
-S = S * adjacency_matrix
-
-# # Normalize S so that each row sums to 1, avoiding division by zero
-# row_sums = S.sum(axis=1, keepdims=True)
-# row_sums[row_sums == 0] = 1  # Prevent division by zero
-# S = S / row_sums
-
-# Time steps
-T = 200
-
-# Initialize occupancy probabilities
-P = np.zeros((n, T))
-P[:, 0] = np.random.random(n)
-
-# Iterate over time steps
-for t in range(T - 1):
-    for i in range(n):
+for t in range(max_time - 1):
+    for i in range(num_patches):
         colonization = c * np.sum(P[:, t] * S[:, i]) * (1 - P[i, t])
-        extinction = e[i] * P[i, t]
-        P[i, t + 1] = P[i, t] + colonization - extinction
+        extinction = extinction_rates[i] * P[i, t]
+        P[i, t + 1] = np.clip(P[i, t] + colonization - extinction, 0, 1)
 
-print(np.max(np.linalg.eig(c*S-np.diag(e))[0]))
+# === PLOTTING === #
+plt.figure(figsize=(12, 6))
+for i in range(num_patches):
+    plt.plot(P[i, :], lw=1)
 
-# Plot occupancy probabilities for all patches over time
-plt.figure(figsize=(10, 6))
-for i in range(n):
-    plt.plot(P[i, :], label=f'Patch {i+1}')
-
-plt.xlabel('Time step',fontsize = 15)
-plt.ylabel('Occupancy Probability', fontsize = 15)
-plt.title('Dynamics of the spatially realistic metapopulation model')
-plt.legend(loc='upper right', bbox_to_anchor=(1.15, 1), ncol=2)
+plt.xlabel('Time step', fontsize=14)
+plt.ylabel('Occupancy probability', fontsize=14)
+plt.title('Metapopulation Dynamics with Sparse Spatial Connectivity', fontsize=16)
+plt.grid(True)
+plt.tight_layout()
 plt.show()
-

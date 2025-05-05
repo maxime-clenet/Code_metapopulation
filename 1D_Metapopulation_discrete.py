@@ -1,73 +1,79 @@
 import numpy as np
-import networkx as nx
 import matplotlib.pyplot as plt
+import networkx as nx
 
-# Set the seed for reproducibility
-np.random.seed(42)
+# === PARAMETERS === #
+num_patches = 10           # Number of habitat patches
+square_size = 2            # Spatial domain size (2x2 square)
+c = 1.0                    # Colonization rate
+e_0 = 0.01                # Baseline extinction rate
+z = 1                      # Extinction exponent
+alpha = 0.01               # Dispersal limitation coefficient
+T = 300                    # Number of time steps
+p = 1.0                    # Erdős-Rényi edge probability (fully connected if 1)
+seed = 42                  # Random seed for reproducibility
 
-# Parameters
-n = 10  # Number of patches
-c = 0.1  # Fixed colonization rate for all patches
-e_0 = 0.1  # Baseline extinction rate
-z = 1  # Extinction exponent
-beta = 1  # Emmigration exponent
-alpha = 0.1  # Example value for alpha
-p = 0.2  # Probability of edge creation in Erdős-Rényi graph
-T = 1000  # Time steps
+# === INITIALIZATION === #
+np.random.seed(seed)
 
-# Generate random areas for each patch
-A = np.random.random(n) + 1
+# Generate spatial patch locations and standardized areas
+patch_locations = np.random.rand(num_patches, 2) * square_size
+A = np.random.uniform(1, 4, num_patches)
+A_std = A / np.sum(A)
 
-# Generate random distances between patches
-distances = np.random.random((n, n)) * 10
+# Compute Euclidean distances
+distances = np.linalg.norm(patch_locations[:, None, :] - patch_locations[None, :, :], axis=2)
+np.fill_diagonal(distances, np.inf)  # Prevent self-colonization
 
-# Calculate extinction rate for each patch
-e = e_0 * A**(-z)
+# Generate Erdős-Rényi graph and adjacency mask
+G = nx.erdos_renyi_graph(num_patches, p, seed=seed)
+adj_matrix = nx.to_numpy_array(G)
+np.fill_diagonal(adj_matrix, 0)
 
-# Calculate the connectivity matrix (dispersal success between patches)
-S = A[:, np.newaxis]**beta * np.exp(-alpha * distances)
+# === LANDSCAPE MATRIX (for capacity) with sparsity === #
+A_i = A_std[:, None]
+A_j = A_std[None, :]
+landscape_matrix = A_i * A_j * np.exp(-alpha * distances)
+np.fill_diagonal(landscape_matrix, 0)
+landscape_matrix *= adj_matrix  # Apply sparsity
 
-# Generate an Erdős-Rényi graph
-G = nx.erdos_renyi_graph(n, p, seed=42)
+# Metapopulation capacity
+lambda_M = np.max(np.linalg.eigvals(landscape_matrix).real)
+print(f"Metapopulation capacity (λ_M): {lambda_M:.4f}")
 
-# Convert the graph to an adjacency matrix and ensure diagonal is 0
-adjacency_matrix = nx.to_numpy_array(G)
-np.fill_diagonal(adjacency_matrix, 0)
+# === EXTINCTION RATES === #
+e = e_0 * A_std ** (-z)
 
-# Incorporate the adjacency matrix into the connectivity matrix S
-S *= adjacency_matrix
+# === CONNECTIVITY MATRIX (used in nonlinear dynamics) === #
+# S_ji = A_j * exp(-alpha * d_ji)
+S = A_std[None, :] * np.exp(-alpha * distances)
+np.fill_diagonal(S, 0)
+S *= adj_matrix  # Apply same sparsity constraint
 
-# # Normalize S so that each row sums to 1, avoiding division by zero
-# row_sums = S.sum(axis=1, keepdims=True)
-# row_sums[row_sums == 0] = 1  # Prevent division by zero
-# S /= row_sums
+# === SIMULATION (Nonlinear colonization model) === #
+P = np.zeros((num_patches, T))
+P[:, 0] = np.random.rand(num_patches)
 
-# Initialize a matrix P with zeros, of size n x T
-P = np.zeros((n, T))
-
-# Set the initial condition: random probabilities for each patch
-P[:, 0] = np.random.random(n)
-
-# Iterate over time steps
-for k in range(T-1):
-    # Initialize q as an array of ones for the product calculation
-    q = np.ones(n)
-    # Calculate the product term for all nodes using nested loops
-    for i in range(n):
-        for j in range(n):
-            q[i] *= (1 - c * S[j,i] * P[j, k])
-    # Update the probabilities for all nodes at time k+1
+for k in range(T - 1):
+    q = np.ones(num_patches)
+    for i in range(num_patches):
+        for j in range(num_patches):
+            q[i] *= (1 - c * S[j, i] * P[j, k])
     P[:, k + 1] = 1 - (1 - (1 - e) * P[:, k]) * q
+    P[:, k + 1] = np.clip(P[:, k + 1], 0, 1)
 
-# Print the maximum eigenvalue of the connectivity matrix S
-print("Max eigenvalue of the connectivity matrix S:", np.max(np.linalg.eig(c*S - np.diag(e))[0]))
+# === CONNECTIVITY MATRIX LEADING EIGENVALUE === #
+lambda_max = np.max(np.linalg.eigvals(c * S - np.diag(e)).real)
+print(f"Max eigenvalue of the connectivity matrix S: {lambda_max:.4f}")
 
-# Plot the probability evolution for all patches
-plt.figure(figsize=(10, 6))
-for i in range(n):
-    plt.plot(P[i, :], label=f'Patch {i+1}')
-plt.xlabel('Time step')
-plt.ylabel('Probability')
-plt.title('Probability Evolution for All Patches')
-plt.legend(loc='upper right', bbox_to_anchor=(1.15, 1), ncol=2)
+# === PLOT === #
+plt.figure(figsize=(12, 6))
+for i in range(num_patches):
+    plt.plot(P[i, :], lw=1)
+
+plt.xlabel('Time step', fontsize=14)
+plt.ylabel('Occupancy probability', fontsize=14)
+plt.title('Nonlinear Metapopulation Dynamics with Sparse Connectivity', fontsize=16)
+plt.grid(True)
+plt.tight_layout()
 plt.show()
