@@ -27,32 +27,44 @@ def generate_matrices(n, c, e_0, z, beta, T, scenario_func):
     
     return P, supra_adjacency_matrix
 
-def create_scenario_with_modularity(n, e_0, z, beta, k):
-    distances = np.random.random((n, n)) * 10
-    alpha = 3
-    A = (np.ones(n) * 1)  
+def create_scenario_with_modularity(n, e_0, z, beta, k=1, alpha=0.1, square_size=2):
+    # Spatial positions
+    np.random.seed(42)
+    patch_locations = np.random.rand(n, 2) * square_size
+    # Homogeneous areas
+    A = np.ones(n)
+    A_std = A / np.sum(A)
 
-    e = e_0 * A**(-z)
-    S = A[:, np.newaxis]**beta * np.exp(-alpha * distances)
-    
-    # Create a stochastic block model graph
-    num_communities = int(np.sqrt(n))  # Number of communities
+    # Compute pairwise Euclidean distances
+    distances = np.linalg.norm(patch_locations[:, None, :] - patch_locations[None, :, :], axis=2)
+    np.fill_diagonal(distances, np.inf)
+
+    # Extinction rates
+    e = e_0 * A_std ** (-z)
+
+    # Base colonization matrix: S_ji = A_j^beta * exp(-alpha * d_ji)
+    A_j = A_std[None, :] ** beta
+    S = A_j * np.exp(-alpha * distances)
+    np.fill_diagonal(S, 0)
+
+    # Create SBM adjacency matrix with modular structure
+    num_communities = int(np.sqrt(n))
     sizes = [n // num_communities] * num_communities
-    p_in = 0.5  # Probability of edges within communities
-    p_out = 0.1/(1+k)   # Probability of edges between communities decreases with k
-    
+    p_in = 0.5
+    p_out = 0.5 *(1 - k/1000)  # Increase k → lower inter-community connectivity
+
+    # Create the SBM probability matrix
     p_matrix = np.full((num_communities, num_communities), p_out)
     np.fill_diagonal(p_matrix, p_in)
-    
+
+    # Generate modular graph
     G = nx.stochastic_block_model(sizes, p_matrix, seed=42)
     adjacency_matrix = nx.to_numpy_array(G)
     np.fill_diagonal(adjacency_matrix, 0)
+
+    # Apply modular sparsity mask to dispersal matrix
     S *= adjacency_matrix
-    
-    # row_sums = S.sum(axis=1, keepdims=True)
-    # row_sums[row_sums == 0] = 1
-    # S /= row_sums
-    
+
     return S, e
 
 
@@ -72,18 +84,18 @@ def max_eigenvalue_product_matrix(supra_adjacency_matrix):
     return np.max(eigenvalues)
 
 # Parameters
-n = 100
+n = 30
 c = 1
-e_0 = 0.1
+e_0 = 0.01
 z = 1
 beta = 1
 
 
 # Vary the colonization rate from 0.1 to 1
-colonization_rates = np.linspace(0.05, 1, 10)
+colonization_rates = np.linspace(0.6, 1, 10)
 
 # Different values of T
-T_values = [100,200,500,1000]
+T_values = [100,500]
 
 # Store results for plotting
 results = {}

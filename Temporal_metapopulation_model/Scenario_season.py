@@ -140,7 +140,7 @@ colonization_rates = np.linspace(0.02, 0.5, 50)
 #colonization_rates = np.array([0.25])
 
 # Different values of T
-T_values = [1000]
+T_values = [10000]
 
 # Store results for plotting
 results = {}
