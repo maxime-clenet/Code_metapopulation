@@ -2,30 +2,6 @@ import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
 
-def generate_matrices(n, c, e_0, z, beta, T, scenario_func):
-    np.random.seed(42)
-
-    # Initialize occupancy probability matrix
-    P = np.zeros((n, T))
-    P[:, 0] = np.random.random(n)
-
-    # Store time-varying transition matrices
-    supra_adjacency_matrix = np.zeros((T-1, n, n))
-
-    for k in range(T-1):
-        S, e = scenario_func(n, e_0, z, beta, k)
-        supra_adjacency_matrix[k] = np.eye(n) - np.diag(e) + c * S
-
-        # Nonlinear update
-        q = np.ones(n)
-        for i in range(n):
-            for j in range(n):
-                q[i] *= (1 - c * S[j, i] * P[j, k])
-        P[:, k + 1] = 1 - (1 - (1 - e) * P[:, k]) * q
-        P[:, k + 1] = np.clip(P[:, k + 1], 0, 1)
-
-    return P, supra_adjacency_matrix
-
 def create_scenario_1(n, e_0, z, beta, f, square_size=5, p=1):
     """
     Génère une matrice de connectivité S et un vecteur de taux d’extinction e, avec connectivité modulée
@@ -106,7 +82,7 @@ def max_eigenvalue_product_matrix(supra_adjacency_matrix):
         product_matrix = np.dot(supra_adjacency_matrix[k], product_matrix)
 
     eigenvalues = np.linalg.eigvals(product_matrix)**(1/T_minus_1)
-    return np.max(eigenvalues.real)
+    return np.max(np.abs(eigenvalues))
 
 # === Parameters === #
 n = 50
@@ -128,46 +104,6 @@ def scenario_with_threshold(n, e_0, z, beta, k):
         n, e_0, z, beta,
         f=lambda d: time_varying_threshold_decay(d, k)
     )
-
-# === Run simulation over varying colonization rates === #
-max_eigenvalues = []
-mean_final_probs = []
-
-for c in colonization_rates:
-    supra = generate_supra_adjacency_only(n, c, e_0, z, beta, T, scenario_with_threshold)
-    max_eigenvalue = max_eigenvalue_product_matrix(supra)
-    max_eigenvalues.append(max_eigenvalue)
-    # mean_final_probs.append(np.mean(P[:, -1]))
-
-# === Plot results === #
-# Interpolate to find where max_eigenvalues crosses 1
-threshold = 1.0
-cross_idx = np.where(np.diff(np.sign(np.array(max_eigenvalues) - threshold)))[0]
-
-if len(cross_idx) > 0:
-    # Interpolate between the two colonization rates where the crossing happens
-    i = cross_idx[0]
-    x0, x1 = colonization_rates[i], colonization_rates[i + 1]
-    y0, y1 = max_eigenvalues[i], max_eigenvalues[i + 1]
-
-    # Linear interpolation to estimate where the curve crosses y=1
-    crossing_c = x0 + (threshold - y0) * (x1 - x0) / (y1 - y0)
-
-    # Plot with vertical line
-    plt.figure(figsize=(10, 6))
-    plt.plot(colonization_rates, max_eigenvalues, marker='o', label='Max Eigenvalue of Product Matrix')
-    # plt.plot(colonization_rates, mean_final_probs, marker='x', label='Mean Occupancy at Final Time Step')
-    plt.axvline(x=crossing_c, color='red', linestyle='--', label=f'λ=1 threshold at c ≈ {crossing_c:.3f}')
-    plt.xlabel('Colonization Rate', fontsize=14)
-    plt.ylabel('Value', fontsize=14)
-    plt.title('Stability and Persistence vs. Colonization Rate', fontsize=16)
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
-else:
-    print("No crossing of λ=1 found in the colonization rate range.")
-
 
 # === Experiment 1: max eigenvalue vs colonization rate c === #
 colonization_rates = np.linspace(0.1, 2, 20)
@@ -202,7 +138,7 @@ def make_scenario_w(w):
 
 eigvals_w = []
 for w in w_values:
-    supra = generate_supra_adjacency_only(n, 2.0, e_0, z, beta, T, make_scenario_w(w))
+    supra = generate_supra_adjacency_only(n, 3.0, e_0, z, beta, T, make_scenario_w(w))
     eigvals_w.append(max_eigenvalue_product_matrix(supra))
 
 # === Plotting all three graphs === #
@@ -229,5 +165,61 @@ axs[2].set_xlabel("Frequency w of Threshold Oscillation")
 axs[2].set_ylabel("Max Eigenvalue")
 axs[2].grid(True)
 
+plt.tight_layout()
+plt.show()
+
+
+
+
+
+
+# === Parameters === #
+n = 50
+e_0 = 0.005
+z = 1
+beta = 1
+T = 500
+c = 1.0
+A_values = np.linspace(0, 4, 30)
+
+# Scenario generator factory
+def make_scenario_A_w(A, w):
+    return lambda n, e_0, z, beta, k: create_scenario_1(
+        n, e_0, z, beta,
+        f=lambda d: (d < 0.5 * A * (1 + np.sin(2 * np.pi * w * k))).astype(float)
+    )
+
+# Compute eigenvalues for w = 0
+eigvals_w0 = []
+for A in A_values:
+    scenario_func = make_scenario_A_w(A, w=0)
+    supra = generate_supra_adjacency_only(n, c, e_0, z, beta, T, scenario_func)
+    eigvals_w0.append(max_eigenvalue_product_matrix(supra))
+
+# Compute eigenvalues for w = 1/T
+eigvals_w1 = []
+for A in A_values:
+    scenario_func = make_scenario_A_w(A, w=1/T)
+    supra = generate_supra_adjacency_only(n, c, e_0, z, beta, T, scenario_func)
+    eigvals_w1.append(max_eigenvalue_product_matrix(supra))
+
+n = 50
+L = 5
+rho = n / L**2
+r_c = np.sqrt(4.512 / (np.pi * rho))  # seuil de percolation en distance
+A_threshold = 2 * r_c                 # seuil de distance × 2 interprété comme amplitude
+
+
+# Plot the two curves
+plt.figure(figsize=(8, 5))
+plt.plot(A_values, eigvals_w0, marker='o', label='w = 0')
+plt.plot(A_values, eigvals_w1, marker='s', label='w = 1/T')
+plt.axvline(x=A_threshold, color='red', linestyle='--', label=f'2× seuil percolation ≈ {A_threshold:.2f}')
+
+plt.xlabel("Amplitude A of Threshold Oscillation")
+plt.ylabel("Max Eigenvalue")
+plt.title("Max Eigenvalue vs Amplitude A for w=0 and w=1/T")
+plt.legend()
+plt.grid(True)
 plt.tight_layout()
 plt.show()

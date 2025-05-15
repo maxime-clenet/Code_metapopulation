@@ -77,7 +77,7 @@ def max_eigenvalue_product_matrix(supra_adjacency_matrix):
     # Compute the eigenvalues of the product matrix
     eigenvalues = np.linalg.eig(product_matrix)[0]**(1/T_minus_1)
     # Return the maximum eigenvalue
-    return np.max(eigenvalues)
+    return np.max(np.abs(eigenvalues))
 
 def min_eigenvalue_all_matrices(supra_adjacency_matrix):
     T_minus_1 = supra_adjacency_matrix.shape[0]
