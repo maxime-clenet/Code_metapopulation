@@ -86,7 +86,7 @@ def max_eigenvalue_product_matrix(supra_adjacency_matrix):
 
 # === Parameters === #
 n = 100
-e_0 = 0.01
+e_0 = 0.002
 z = 1
 beta = 1
 T = 500
@@ -133,12 +133,12 @@ w_values = np.array([i / T for i in range(0, 11)])
 def make_scenario_w(w):
     return lambda n, e_0, z, beta, k: create_scenario_1(
         n, e_0, z, beta,
-        f=lambda d: (d < 0.5 * 2 * (1 + np.sin(2 * np.pi * w * k))).astype(float)
+        f=lambda d: (d < 0.5 * 4 * (1 + np.sin(2 * np.pi * w * k))).astype(float)
     )
 
 eigvals_w = []
 for w in w_values:
-    supra = generate_supra_adjacency_only(n, 3.0, e_0, z, beta, T, make_scenario_w(w))
+    supra = generate_supra_adjacency_only(n, 1.0, e_0, z, beta, T, make_scenario_w(w))
     eigvals_w.append(max_eigenvalue_product_matrix(supra))
 
 # === Plotting all three graphs === #
@@ -216,8 +216,8 @@ plt.plot(A_values, eigvals_w0, marker='o', label='w = 0')
 plt.plot(A_values, eigvals_w1, marker='s', label='w = 1/T')
 plt.axvline(x=A_threshold, color='red', linestyle='--', label=f'2× Percolation threshold ≈ {A_threshold:.2f}')
 
-plt.xlabel("Amplitude A of Threshold Oscillation")
-plt.ylabel(r"Spectral Radius $\lambda(\hat{M})$")
+plt.xlabel("Amplitude of seasonal fluctuations A")
+plt.ylabel(r"Temporal metapopulation capacity $\lambda_{\hat{M}}$")
 #plt.title("Max Eigenvalue vs Amplitude A for w=0 and w=1/T")
 plt.legend()
 plt.grid(True)

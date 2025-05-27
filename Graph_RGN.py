@@ -46,7 +46,7 @@ def plot_graph_colored_by_distance(S, patch_locations, title):
         edge_color='gray',
         alpha=0.6
     )
-    plt.title(title)
+    #plt.title(title)
     plt.axis('equal')
     plt.show()
 
@@ -63,7 +63,7 @@ def decay_below(d):
 
 # Decay function for above the percolation threshold (r = 3)
 def decay_above(d):
-    return (d < 3).astype(float)
+    return (d < 2).astype(float)
 
 # Generate graph below the percolation threshold
 S_below, e_below, loc_below = create_scenario_1(n, e_0, z, beta, decay_below, square_size)
