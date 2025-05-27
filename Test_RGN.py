@@ -2,7 +2,7 @@ import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
 
-def create_scenario_1(n, e_0, z, beta, f, square_size=5, p=1):
+def create_scenario_1(n, e_0, z, beta, f, square_size=10, p=1):
     """
     Génère une matrice de connectivité S et un vecteur de taux d’extinction e, avec connectivité modulée
     par une fonction f appliquée à la distance entre patchs.
@@ -85,7 +85,7 @@ def max_eigenvalue_product_matrix(supra_adjacency_matrix):
     return np.max(np.abs(eigenvalues))
 
 # === Parameters === #
-n = 50
+n = 100
 e_0 = 0.01
 z = 1
 beta = 1
@@ -174,13 +174,13 @@ plt.show()
 
 
 # === Parameters === #
-n = 50
-e_0 = 0.005
+n = 100
+e_0 = 0.002
 z = 1
 beta = 1
 T = 500
 c = 1.0
-A_values = np.linspace(0, 4, 30)
+A_values = np.linspace(0.5, 6, 30)
 
 # Scenario generator factory
 def make_scenario_A_w(A, w):
@@ -203,8 +203,8 @@ for A in A_values:
     supra = generate_supra_adjacency_only(n, c, e_0, z, beta, T, scenario_func)
     eigvals_w1.append(max_eigenvalue_product_matrix(supra))
 
-n = 50
-L = 5
+n = 100
+L = 10
 rho = n / L**2
 r_c = np.sqrt(4.512 / (np.pi * rho))  # seuil de percolation en distance
 A_threshold = 2 * r_c                 # seuil de distance × 2 interprété comme amplitude
@@ -214,11 +214,11 @@ A_threshold = 2 * r_c                 # seuil de distance × 2 interprété comm
 plt.figure(figsize=(8, 5))
 plt.plot(A_values, eigvals_w0, marker='o', label='w = 0')
 plt.plot(A_values, eigvals_w1, marker='s', label='w = 1/T')
-plt.axvline(x=A_threshold, color='red', linestyle='--', label=f'2× seuil percolation ≈ {A_threshold:.2f}')
+plt.axvline(x=A_threshold, color='red', linestyle='--', label=f'2× Percolation threshold ≈ {A_threshold:.2f}')
 
 plt.xlabel("Amplitude A of Threshold Oscillation")
-plt.ylabel("Max Eigenvalue")
-plt.title("Max Eigenvalue vs Amplitude A for w=0 and w=1/T")
+plt.ylabel(r"Spectral Radius $\lambda(\hat{M})$")
+#plt.title("Max Eigenvalue vs Amplitude A for w=0 and w=1/T")
 plt.legend()
 plt.grid(True)
 plt.tight_layout()
