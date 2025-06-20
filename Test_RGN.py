@@ -49,6 +49,59 @@ def create_scenario_1(n, e_0, z, beta, f, square_size=10, p=1):
 
     return S, e
 
+def periodic_distance(locations, square_size):
+    """
+    Calcule la matrice des distances entre points avec conditions périodiques sur un carré de taille square_size.
+    """
+    delta = np.abs(locations[:, None, :] - locations[None, :, :])
+    delta = np.minimum(delta, square_size - delta)  # wrap-around effect
+    return np.sqrt((delta ** 2).sum(axis=2))
+
+
+def create_scenario_periodic(n, e_0, z, beta, f, square_size=10, p=1):
+    """
+    Génère une matrice de connectivité S et un vecteur de taux d’extinction e avec distances périodiques.
+
+    Arguments :
+    - n : nombre de patchs
+    - e_0 : taux d'extinction de base
+    - z : exposant de scaling sur les aires pour l'extinction
+    - beta : exposant de scaling sur les aires pour la connectivité
+    - f : fonction de décroissance f(d) appliquée aux distances
+    - square_size : taille du domaine spatial (carré)
+    - p : probabilité d’arête dans le graphe d’Erdős-Rényi
+
+    Retour :
+    - S : matrice de connectivité (n x n)
+    - e : vecteur des taux d'extinction (n)
+    """
+    np.random.seed(42)
+
+    # Positions et aires
+    patch_locations = np.random.rand(n, 2) * square_size
+    A = np.ones(n)
+    A_std = A / np.sum(A)
+
+    # Distances périodiques
+    distances = periodic_distance(patch_locations, square_size)
+    np.fill_diagonal(distances, np.inf)
+
+    # Taux d’extinction
+    e = e_0 * A_std ** (-z)
+
+    # Connectivité avec fonction f sur distances périodiques
+    A_j = A_std[None, :] ** beta
+    S = A_j * f(distances)
+    np.fill_diagonal(S, 0)
+
+    # Sparsification par Erdős-Rényi
+    G = nx.erdos_renyi_graph(n, p, seed=42)
+    adjacency_matrix = nx.to_numpy_array(G)
+    np.fill_diagonal(adjacency_matrix, 0)
+    S *= adjacency_matrix
+
+    return S, e
+
 def generate_supra_adjacency_only(n, c, e_0, z, beta, T, scenario_func):
     """
     Génère uniquement la matrice supra-adjacente temporelle pour un modèle spatio-temporel.
@@ -64,7 +117,7 @@ def generate_supra_adjacency_only(n, c, e_0, z, beta, T, scenario_func):
     Retour :
     - supra_adjacency_matrix : tableau de forme (T-1, n, n)
     """
-    np.random.seed(42)
+
     supra_adjacency_matrix = np.zeros((T - 1, n, n))
 
     for k in range(T - 1):
@@ -100,7 +153,7 @@ def time_varying_threshold_decay(d, k, A=4.0, w=0.01):
 
 # === Wrapper for create_scenario_1 with f === #
 def scenario_with_threshold(n, e_0, z, beta, k):
-    return create_scenario_1(
+    return create_scenario_periodic(
         n, e_0, z, beta,
         f=lambda d: time_varying_threshold_decay(d, k)
     )
@@ -180,11 +233,11 @@ z = 1
 beta = 1
 T = 500
 c = 1.0
-A_values = np.linspace(0.5, 6, 30)
+A_values = np.linspace(0.5, 6, 10)
 
 # Scenario generator factory
 def make_scenario_A_w(A, w):
-    return lambda n, e_0, z, beta, k: create_scenario_1(
+    return lambda n, e_0, z, beta, k: create_scenario_periodic(
         n, e_0, z, beta,
         f=lambda d: (d < 0.5 * A * (1 + np.sin(2 * np.pi * w * k))).astype(float)
     )

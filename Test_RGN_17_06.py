@@ -2,31 +2,7 @@ import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
 
-def generate_matrices(n, c, e_0, z, beta, T, scenario_func):
-    np.random.seed(42)
-
-    # Initialize occupancy probability matrix
-    P = np.zeros((n, T))
-    P[:, 0] = np.random.random(n)
-
-    # Store time-varying transition matrices
-    supra_adjacency_matrix = np.zeros((T-1, n, n))
-
-    for k in range(T-1):
-        S, e = scenario_func(n, e_0, z, beta, k)
-        supra_adjacency_matrix[k] = np.eye(n) - np.diag(e) + c * S
-
-        # Nonlinear update
-        q = np.ones(n)
-        for i in range(n):
-            for j in range(n):
-                q[i] *= (1 - c * S[j, i] * P[j, k])
-        P[:, k + 1] = 1 - (1 - (1 - e) * P[:, k]) * q
-        P[:, k + 1] = np.clip(P[:, k + 1], 0, 1)
-
-    return P, supra_adjacency_matrix
-
-def create_scenario_1(n, e_0, z, beta, f, square_size=5, p=1):
+def create_scenario_1(n, e_0, z, beta, f, square_size=20, p=1):
     """
     Génère une matrice de connectivité S et un vecteur de taux d’extinction e, avec connectivité modulée
     par une fonction f appliquée à la distance entre patchs.
@@ -82,7 +58,7 @@ def periodic_distance(locations, square_size):
     return np.sqrt((delta ** 2).sum(axis=2))
 
 
-def create_scenario_periodic(n, e_0, z, beta, f, square_size=5, p=1):
+def create_scenario_periodic(n, e_0, z, beta, f, square_size=20, p=1):
     """
     Génère une matrice de connectivité S et un vecteur de taux d’extinction e avec distances périodiques.
 
@@ -99,7 +75,7 @@ def create_scenario_periodic(n, e_0, z, beta, f, square_size=5, p=1):
     - S : matrice de connectivité (n x n)
     - e : vecteur des taux d'extinction (n)
     """
-    np.random.seed(42)
+    np.random.seed(40)
 
     # Positions et aires
     patch_locations = np.random.rand(n, 2) * square_size
@@ -126,6 +102,29 @@ def create_scenario_periodic(n, e_0, z, beta, f, square_size=5, p=1):
 
     return S, e
 
+def generate_supra_adjacency_only(n, c, e_0, z, beta, T, scenario_func):
+    """
+    Génère uniquement la matrice supra-adjacente temporelle pour un modèle spatio-temporel.
+
+    Paramètres :
+    - n : nombre de patchs
+    - c : taux de colonisation
+    - e_0, z : paramètres d’extinction
+    - beta : pondération de l’aire sur la connectivité
+    - T : durée temporelle
+    - scenario_func : fonction de génération S, e avec dépendance temporelle (doit accepter k)
+
+    Retour :
+    - supra_adjacency_matrix : tableau de forme (T-1, n, n)
+    """
+
+    supra_adjacency_matrix = np.zeros((T - 1, n, n))
+
+    for k in range(T - 1):
+        S, e = scenario_func(n, e_0, z, beta, k)
+        supra_adjacency_matrix[k] = np.eye(n) - np.diag(e) + c * S
+
+    return supra_adjacency_matrix
 
 def max_eigenvalue_product_matrix(supra_adjacency_matrix):
     n = supra_adjacency_matrix.shape[1]
@@ -139,72 +138,52 @@ def max_eigenvalue_product_matrix(supra_adjacency_matrix):
     return np.max(np.abs(eigenvalues))
 
 # === Parameters === #
-n = 10
-e_0 = 0.01
+n = 100
+e_0 = 0.001
 z = 1
 beta = 1
-T = 100
-colonization_rates = np.linspace(0.1, 2, 20)
+T = 500
+c = 1.0
+A_values = np.linspace(0.5, 8, 20)
 
-# === Define time-varying decay function === #
-def time_varying_threshold_decay(d, k, A=4.0, w=0.01):
-    r = 0.5 * A * (1 + np.sin(2 * np.pi * w * k))
-    # r = 2
-    return (d < r).astype(float)
-
-# === Wrapper for create_scenario_1 with f === #
-def scenario_with_threshold(n, e_0, z, beta, k):
-    return create_scenario_1(
+# Scenario generator factory
+def make_scenario_A_w(A, w):
+    return lambda n, e_0, z, beta, k: create_scenario_periodic(
         n, e_0, z, beta,
-        f=lambda d: time_varying_threshold_decay(d, k)
+        f=lambda d: (d < 0.5 * A * (1 + np.sin(2 * np.pi * w * k))).astype(float)
     )
 
-# === Run simulation over varying colonization rates === #
-max_eigenvalues = []
-mean_final_probs = []
+# Compute eigenvalues for w = 0
+eigvals_w0 = []
+for A in A_values:
+    scenario_func = make_scenario_A_w(A, w=0)
+    supra = generate_supra_adjacency_only(n, c, e_0, z, beta, T, scenario_func)
+    eigvals_w0.append(max_eigenvalue_product_matrix(supra))
 
-for c in colonization_rates:
-    P, supra = generate_matrices(n, c, e_0, z, beta, T, scenario_with_threshold)
-    max_eigenvalue = max_eigenvalue_product_matrix(supra)
-    max_eigenvalues.append(max_eigenvalue)
-    mean_final_probs.append(np.mean(P[:, -1]))
+# Compute eigenvalues for w = 1/T
+eigvals_w1 = []
+for A in A_values:
+    scenario_func = make_scenario_A_w(A, w=1/T)
+    supra = generate_supra_adjacency_only(n, c, e_0, z, beta, T, scenario_func)
+    eigvals_w1.append(max_eigenvalue_product_matrix(supra))
 
-# === Plot results === #
-# Interpolate to find where max_eigenvalues crosses 1
-threshold = 1.0
-cross_idx = np.where(np.diff(np.sign(np.array(max_eigenvalues) - threshold)))[0]
+n = 100
+L = 20
+rho = n / L**2
+r_c = np.sqrt(4.512 / (np.pi * rho))  # seuil de percolation en distance
+A_threshold = 2 * r_c                 # seuil de distance × 2 interprété comme amplitude
 
-if len(cross_idx) > 0:
-    # Interpolate between the two colonization rates where the crossing happens
-    i = cross_idx[0]
-    x0, x1 = colonization_rates[i], colonization_rates[i + 1]
-    y0, y1 = max_eigenvalues[i], max_eigenvalues[i + 1]
 
-    # Linear interpolation to estimate where the curve crosses y=1
-    crossing_c = x0 + (threshold - y0) * (x1 - x0) / (y1 - y0)
+# Plot the two curves
+plt.figure(figsize=(8, 5))
+plt.plot(A_values, eigvals_w0, marker='o', label='w = 0')
+plt.plot(A_values, eigvals_w1, marker='s', label='w = 1/T')
+plt.axvline(x=A_threshold, color='red', linestyle='--', label=f'2× Percolation threshold ≈ {A_threshold:.2f}')
 
-    # Plot with vertical line
-    plt.figure(figsize=(10, 6))
-    plt.plot(colonization_rates, max_eigenvalues, marker='o', label='Max Eigenvalue of Product Matrix')
-    plt.plot(colonization_rates, mean_final_probs, marker='x', label='Mean Occupancy at Final Time Step')
-    plt.axvline(x=crossing_c, color='red', linestyle='--', label=f'λ=1 threshold at c ≈ {crossing_c:.3f}')
-    plt.xlabel('Colonization Rate', fontsize=14)
-    plt.ylabel('Value', fontsize=14)
-    plt.title('Stability and Persistence vs. Colonization Rate', fontsize=16)
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
-else:
-    print("No crossing of λ=1 found in the colonization rate range.")
-
-# Plot the probability evolution for all patches
-plt.figure(figsize=(10, 6))
-for i in range(n):
-    plt.plot(P[i, :], color='red')
-
-plt.xlabel('Time step',fontsize = 15)
-plt.ylabel('Occupancy probability',fontsize = 15)
-plt.title('Dynamics for c = 0.4',fontsize = 15)
-plt.legend(loc='upper right' ,fontsize = 15)
+plt.xlabel("Amplitude of seasonal fluctuations A")
+plt.ylabel(r"Temporal metapopulation capacity $\lambda_{\hat{M}}$")
+#plt.title("Max Eigenvalue vs Amplitude A for w=0 and w=1/T")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
 plt.show()
