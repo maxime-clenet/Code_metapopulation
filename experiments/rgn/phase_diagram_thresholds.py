@@ -1,135 +1,29 @@
 """
-Phase_diagram_thresholds.py
-
 Phase diagram in (r_0, A_half) parameter space for w = 1/T.
 
-Two thresholds to distinguish:
-  r_c : geometric percolation of the RGG (giant component appears)
-        n·π·r_c² / L² ≈ 4.51  on the torus
-  r_p : metapopulation persistence threshold, ρ(M(r_p)) = 1
-        in general r_p > r_c (having a giant component is necessary but not sufficient)
+Two thresholds:
+  r_c : geometric percolation of the RGG (giant component appears),
+        n·π·r_c² / L² ≈ 4.51 on the torus
+  r_p : static metapopulation persistence threshold, ρ(M(r_p)) = 1;
+        in general r_p > r_c (a giant component is necessary but not sufficient)
 
-Scenario: r(k) = max(0,  r_0 + A_half · sin(2π · w · k))
-  r_0    = mean connectivity radius  (oscillation centre)
-  A_half = oscillation amplitude
+Scenario: r(k) = max(0, r_0 + A_half·sin(2π·w·k))
 
 Three amplitude regimes for fixed r_0 < r_c < r_p:
-  (1)  A_half < r_c  − r_0  : r(t) always below r_c  → fully fragmented, no rescue
-  (2)  r_c − r_0 < A_half < r_p − r_0 : r(t) crosses r_c but not r_p → giant
-       component appears transiently but K^(t) never expansive → no rescue yet
-  (3)  A_half > r_p − r_0  : r(t) crosses r_p → periodic rescue operates;
-       persistence possible even when ρ(M(r_0)) < 1
+  (1) A_half < r_c − r_0           : r(t) always below r_c → fragmented, no rescue
+  (2) r_c − r_0 < A_half < r_p − r_0: r(t) crosses r_c but not r_p
+  (3) A_half > r_p − r_0           : r(t) crosses r_p → periodic rescue possible
+                                      even when ρ(M(r_0)) < 1
 
 Key prediction: λ_product is non-monotone in A_half for fixed r_0 < r_p.
 """
 
-import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-from scipy.optimize import brentq
+import numpy as np
 
-
-# ===========================================================================
-#  GEOMETRY
-# ===========================================================================
-
-def periodic_distance(locations, square_size):
-    delta = np.abs(locations[:, None, :] - locations[None, :, :])
-    delta = np.minimum(delta, square_size - delta)
-    return np.sqrt((delta ** 2).sum(axis=2))
-
-
-def percolation_radius(n, square_size):
-    """r_c from n·π·r_c²/L² = 4.512."""
-    return np.sqrt(4.512 / (np.pi * n / square_size ** 2))
-
-
-def _build_geometry(n, square_size, e_0, z, beta, seed):
-    np.random.seed(seed)
-    locs  = np.random.rand(n, 2) * square_size
-    A_std = np.ones(n) / n
-    dist  = periodic_distance(locs, square_size)
-    np.fill_diagonal(dist, np.inf)
-    return dist, e_0 * A_std ** (-z), A_std[None, :] ** beta
-
-
-# ===========================================================================
-#  SCENARIO: centred sinusoidal
-# ===========================================================================
-
-def make_centered_scenario(r_0, A_half, w_freq, n, square_size,
-                            e_0, z, beta, seed):
-    """
-    r(k) = max(0,  r_0 + A_half · sin(2π·w·k)).
-    For A_half = 0: static network.
-    For A_half > r_p − r_0: r(t) crosses the persistence threshold r_p.
-    For A_half > r_0:       r(t) clips at 0 (complete disconnection phase).
-    """
-    dist, e_vec, A_j = _build_geometry(n, square_size, e_0, z, beta, seed)
-
-    def scenario(k):
-        r_k = max(0.0, r_0 + A_half * np.sin(2.0 * np.pi * w_freq * k))
-        S   = A_j * (dist < r_k).astype(float)
-        np.fill_diagonal(S, 0)
-        return S.copy(), e_vec.copy()
-
-    return scenario
-
-
-# ===========================================================================
-#  SUPRA-ADJACENCY AND SPECTRAL METRICS
-# ===========================================================================
-
-def build_supra(scenario_func, n, c, T):
-    supra = np.zeros((T - 1, n, n))
-    for k in range(T - 1):
-        S, e     = scenario_func(k)
-        supra[k] = np.eye(n) - np.diag(e) + c * S
-    return supra
-
-
-def lambda_product(supra):
-    """Temporal metapopulation capacity via power iteration (overflow-safe)."""
-    v, log_s = np.ones(supra.shape[1]) / np.sqrt(supra.shape[1]), 0.0
-    for M in supra:
-        v   = M @ v
-        nrm = np.linalg.norm(v)
-        if nrm < 1e-300:
-            return 0.0
-        log_s += np.log(nrm)
-        v    /= nrm
-    return float(np.exp(log_s / supra.shape[0]))
-
-
-def lambda_mean(supra):
-    """Mean-matrix spectral radius."""
-    return float(np.max(np.abs(np.linalg.eigvals(np.mean(supra, axis=0)))))
-
-
-# ===========================================================================
-#  STATIC LAMBDA AND THRESHOLD r_p
-# ===========================================================================
-
-def static_lambda(r, n, L, c, e_0, z, beta, seed):
-    """ρ(M(r)) for a static network at connectivity radius r."""
-    dist, e_vec, A_j = _build_geometry(n, L, e_0, z, beta, seed)
-    S = A_j * (dist < r).astype(float)
-    np.fill_diagonal(S, 0)
-    M = np.eye(n) - np.diag(e_vec) + c * S
-    return float(np.max(np.abs(np.linalg.eigvals(M))))
-
-
-def find_r_p(n, L, c, e_0, z, beta, seed, r_lo=0.1):
-    """Binary search: ρ(M(r_p)) = 1."""
-    r_hi = L / 2.0
-    f    = lambda r: static_lambda(r, n, L, c, e_0, z, beta, seed) - 1.0
-    if f(r_lo) < 0:
-        print(f"  [warn] static λ < 1 even at r={r_lo:.2f}; r_p estimated as {r_lo}")
-        return r_lo
-    if f(r_hi) > 0:
-        print(f"  [warn] static λ > 1 even at r={r_hi:.2f}; r_p estimated as {r_hi}")
-        return r_hi
-    return brentq(f, r_lo, r_hi, xtol=1e-3)
+from metapop import (build_supra, centered_radius, lambda_mean, lambda_product, make_landscape,
+                     percolation_radius, persistence_radius, static_lambda, threshold_scenario)
+from metapop.plotting import savefig
 
 
 # ===========================================================================
@@ -142,9 +36,16 @@ T          = 500
 SEED       = 40
 w          = 1.0 / T          # one full cycle over the simulation window
 
+land = make_landscape(n, L, SEED)
+
+
+def supra_for(r_0, A_half):
+    return build_supra(threshold_scenario(land, centered_radius(r_0, A_half, w), e_0, z, beta), c, T)
+
+
 r_c = percolation_radius(n, L)
-print("Computing r_p (binary search on static λ) …")
-r_p = find_r_p(n, L, c, e_0, z, beta, SEED)
+print("Computing r_p (root of static λ − 1) …")
+r_p = persistence_radius(land, c, e_0, z, beta)
 print(f"r_c (geometric percolation)  = {r_c:.3f}")
 print(f"r_p (metapop persistence)    = {r_p:.3f}")
 print(f"r_p / r_c                    = {r_p/r_c:.2f}\n")
@@ -156,7 +57,7 @@ print(f"r_p / r_c                    = {r_p/r_c:.2f}\n")
 
 print("Fig 0: static λ scan …")
 r_scan  = np.linspace(0.3, r_p + 2.5, 50)
-lam_s   = [static_lambda(r, n, L, c, e_0, z, beta, SEED) for r in r_scan]
+lam_s   = [static_lambda(land, r, c, e_0, z, beta) for r in r_scan]
 
 fig0, ax = plt.subplots(figsize=(8, 4))
 ax.plot(r_scan, lam_s, '-o', ms=4, color='steelblue', lw=2)
@@ -173,7 +74,7 @@ ax.set_ylabel(r'$\rho(M(r))$ — static spectral radius', fontsize=11)
 ax.set_title('Static metapopulation capacity vs connectivity radius', fontsize=12)
 ax.legend(fontsize=9); ax.grid(True, alpha=0.3)
 plt.tight_layout()
-plt.savefig('fig0_static_lambda.pdf', bbox_inches='tight')
+savefig('fig0_static_lambda.pdf')
 plt.show()
 print()
 
@@ -197,8 +98,7 @@ lm_ph  = np.zeros_like(lp_ph)
 
 for i, A_h in enumerate(Ah_arr):
     for j, r_0 in enumerate(r0_arr):
-        scen      = make_centered_scenario(r_0, A_h, w, n, L, e_0, z, beta, SEED)
-        supra     = build_supra(scen, n, c, T)
+        supra = supra_for(r_0, A_h)
         lp_ph[i, j] = lambda_product(supra)
         lm_ph[i, j] = lambda_mean(supra)
     print(f"  A_half row {i+1}/{len(Ah_arr)} done")
@@ -255,7 +155,7 @@ axes[1].set_title(
 )
 
 plt.tight_layout()
-plt.savefig('fig1_phase_diagram_r0_Ahalf.pdf', bbox_inches='tight')
+savefig('fig1_phase_diagram_r0_Ahalf.pdf')
 plt.show()
 print()
 
@@ -284,7 +184,7 @@ r0_choices = np.array([
 r0_labels = [
     f'$r_0$ = {r:.2f}  (below $r_c$, regime I–III)'
     if r < r_c else
-    f'$r_0$ = {r:.2f}  (between $r_c$ and $r_p$, regime III only)'
+    f'$r_0$ = {r:.2f}  (between $r_c$ and $r_p$, regimes II–III)'
     for r in r0_choices
 ]
 COLORS = ['steelblue', 'darkorange', 'seagreen', 'crimson']
@@ -301,8 +201,7 @@ fig2.suptitle(
 for r_0, label, color in zip(r0_choices, r0_labels, COLORS):
     lp_s, lm_s = [], []
     for A_h in Ah_scan:
-        scen  = make_centered_scenario(r_0, A_h, w, n, L, e_0, z, beta, SEED)
-        supra = build_supra(scen, n, c, T)
+        supra = supra_for(r_0, A_h)
         lp_s.append(lambda_product(supra))
         lm_s.append(lambda_mean(supra))
     lp_s, lm_s = np.array(lp_s), np.array(lm_s)
@@ -326,7 +225,6 @@ for r_0, label, color in zip(r0_choices, r0_labels, COLORS):
 r0_ref = r0_choices[0]
 if r0_ref < r_c:
     for ax in axes2:
-        ylo, yhi = ax.get_ylim() if ax.get_ylim()[1] > 0.1 else (-0.1, 1.5)
         ax.axvspan(0,             r_c - r0_ref, alpha=0.06, color='blue',
                    label='Regime I (always below $r_c$)')
         ax.axvspan(r_c - r0_ref, r_p - r0_ref, alpha=0.06, color='orange',
@@ -365,7 +263,7 @@ axes2[0].text(
 )
 
 plt.tight_layout()
-plt.savefig('fig2_nonmonotone_rescue.pdf', bbox_inches='tight')
+savefig('fig2_nonmonotone_rescue.pdf')
 plt.show()
 print()
 
@@ -387,8 +285,7 @@ lp_stat   = np.zeros(len(r0_scan))   # static λ (A_half = 0)
 for j, r_0 in enumerate(r0_scan):
     col = []
     for A_h in Ah_dense:
-        scen  = make_centered_scenario(r_0, A_h, w, n, L, e_0, z, beta, SEED)
-        supra = build_supra(scen, n, c, T)
+        supra = supra_for(r_0, A_h)
         col.append(lambda_product(supra))
     col = np.array(col)
     lp_opt[j]  = col.max()
@@ -438,7 +335,7 @@ axes3[2].set_title('Rescue gain vs $r_0$\n(peaks where static is most sub-critic
 axes3[2].legend(fontsize=8); axes3[2].grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig('fig3_optimal_amplitude.pdf', bbox_inches='tight')
+savefig('fig3_optimal_amplitude.pdf')
 plt.show()
 
 print("\nAll figures saved as PDF.")

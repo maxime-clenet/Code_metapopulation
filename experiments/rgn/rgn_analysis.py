@@ -1,5 +1,5 @@
 """
-Test_RGN_analysis.py
+rgn_analysis.py
 
 Persistence of a metapopulation in a dynamically changing landscape —
 oscillating Random Geometric Network (RGN).
@@ -10,264 +10,54 @@ structure of connectivity matter?
 
 Key concepts
 ------------
-• λ_product  : ρ(∏ M_k)^{1/T}  — temporal metapopulation capacity (true predictor)
+• λ_product  : ρ(∏ M_k)^{1/T}  — temporal metapopulation capacity (exact predictor)
 • λ_mean     : ρ(M̄)            — naive mean-landscape predictor
 • Duty cycle : φ(A) = fraction of time r(t) > r_c  (analytical, depends only on A)
-• Regimes    : fast  (max(c,e) >> w),  intermediate,  slow  (max(c,e) << w)
+• Regimes    : fast / intermediate / slow demography relative to w (see Exp 5)
 
 Experiments
 -----------
 1. λ vs amplitude A      for several w values
 2. λ vs frequency w      for several A values
-3. Gap vs c and e₀       (impact of ecological processes; gap ~ c²)
+3. Gap vs c and e₀       (impact of ecological processes; commutator ∝ c²)
 4. Phase diagram (A, w)  with duty-cycle isoclines         [main result]
 5. Phase diagrams for three demographic regimes (fast / intermediate / slow)
 6. Shape of r(t): sinusoidal vs. square-wave at same mean  (autocorrelation effect)
 7. Order randomisation: λ_original vs λ_shuffled vs λ_mean (temporal structure)
 """
 
-import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
+import numpy as np
 from matplotlib.colors import ListedColormap
 
-
-# ===========================================================================
-#  1. GEOMETRY
-# ===========================================================================
-
-def periodic_distance(locations, square_size):
-    """Euclidean distance matrix with periodic (torus) boundary conditions."""
-    delta = np.abs(locations[:, None, :] - locations[None, :, :])
-    delta = np.minimum(delta, square_size - delta)
-    return np.sqrt((delta ** 2).sum(axis=2))
+from metapop import (amplitude_for_duty_cycle, build_supra, commutator_norm, duty_cycle,
+                     lambda_mean, lambda_product, lambda_shuffled, make_landscape,
+                     percolation_radius, sinusoidal_radius, square_wave_radius, threshold_scenario)
+from metapop.plotting import savefig
 
 
-def percolation_radius(n, square_size):
-    """r_c: critical connectivity radius for RGN percolation."""
-    return np.sqrt(4.512 / (np.pi * n / square_size ** 2))
-
-
-def percolation_amplitude(n, square_size):
-    """A_c = 2·r_c: static amplitude at which mean r equals r_c."""
-    return 2.0 * percolation_radius(n, square_size)
-
-
-def lattice_positions(n, square_size):
-    """Regular square lattice (n must be a perfect square)."""
-    side = int(np.round(np.sqrt(n)))
-    xs = np.linspace(0, square_size, side, endpoint=False)
-    coords = np.array([(x, y) for y in xs for x in xs])
-    return coords[:n]
+def make_supra(A, w, n, L, e_0, c, T, shape='sin', seed=40):
+    """Transition matrices for r(k) sinusoidal in [0, A] or a square wave (A on half the period)."""
+    radius = sinusoidal_radius(A, w) if shape == 'sin' else square_wave_radius(A, 0.5, w)
+    return build_supra(threshold_scenario(make_landscape(n, L, seed), radius, e_0, z, beta), c, T)
 
 
 # ===========================================================================
-#  2. DUTY CYCLE (analytical)
+#  PLOTTING HELPERS
 # ===========================================================================
 
-def duty_cycle(A, r_c):
-    """
-    Fraction of time r(t) = (A/2)(1+sin(2πwt)) exceeds r_c.
-
-    Depends only on A and r_c (independent of frequency w).
-    φ(A) = ½ − arcsin(2·r_c/A − 1) / π
-    """
-    if A <= r_c:
-        return 0.0
-    h = float(np.clip(2.0 * r_c / A - 1.0, -1.0, 1.0))
-    return 0.5 - np.arcsin(h) / np.pi
-
-
-def amplitude_for_duty_cycle(phi, r_c):
-    """
-    Inverse: A such that duty_cycle(A, r_c) = φ.
-    A = 2·r_c / (1 + cos(π·φ)).
-    """
-    if phi <= 0:
-        return r_c
-    if phi >= 1.0:
-        return np.inf
-    return 2.0 * r_c / (1.0 + np.cos(np.pi * phi))
-
-
-# ===========================================================================
-#  3. SCENARIO FACTORIES
-# ===========================================================================
-
-def _base_geometry(n, square_size, e_0, z, beta, seed, lattice=False):
-    """Shared geometry setup used by all scenario factories."""
-    if lattice:
-        patch_locations = lattice_positions(n, square_size)
-        np.random.seed(seed)          # kept for reproducibility of other calls
-    else:
-        np.random.seed(seed)
-        patch_locations = np.random.rand(n, 2) * square_size
-
-    A_std     = np.ones(n) / n
-    distances = periodic_distance(patch_locations, square_size)
-    np.fill_diagonal(distances, np.inf)
-    e_vec = e_0 * A_std ** (-z)
-    A_j   = A_std[None, :] ** beta
-    return distances, e_vec, A_j
-
-
-def make_sinusoidal_scenario(A_ampl, w_freq, n, square_size=20,
-                              e_0=0.001, z=1.0, beta=1.0, seed=40, lattice=False):
-    """
-    Sinusoidal threshold:  r(k) = (A/2) · (1 + sin(2π·w·k)).
-    Returns  scenario(k) → (S, e).
-    """
-    distances, e_vec, A_j = _base_geometry(n, square_size, e_0, z, beta, seed, lattice)
-
-    def scenario(k):
-        r_k = 0.5 * A_ampl * (1.0 + np.sin(2.0 * np.pi * w_freq * k))
-        S   = A_j * (distances < r_k).astype(float)
-        np.fill_diagonal(S, 0)
-        return S.copy(), e_vec.copy()
-
-    return scenario
-
-
-def make_squarewave_scenario(A_on, phi_on, w_freq, n, square_size=20,
-                              e_0=0.001, z=1.0, beta=1.0, seed=40, lattice=False):
-    """
-    Square-wave (Heaviside) threshold:
-      r(k) = A_on   if (w·k mod 1) < phi_on      ['on'  phase]
-      r(k) = 0      otherwise                     ['off' phase]
-
-    Mean r̄ = phi_on · A_on.  For a fair comparison with the sinusoidal case
-    (same mean r̄ = A_sin/2), set phi_on = 0.5, A_on = A_sin.
-    """
-    distances, e_vec, A_j = _base_geometry(n, square_size, e_0, z, beta, seed, lattice)
-
-    def scenario(k):
-        phase = (w_freq * k) % 1.0
-        r_k   = A_on if phase < phi_on else 0.0
-        S     = A_j * (distances < r_k).astype(float)
-        np.fill_diagonal(S, 0)
-        return S.copy(), e_vec.copy()
-
-    return scenario
-
-
-# ===========================================================================
-#  4. SUPRA-ADJACENCY BUILDER
-# ===========================================================================
-
-def build_supra(scenario_func, n, c, T):
-    """
-    Returns array of shape (T-1, n, n):
-      M_k = I − diag(e) + c · S_k,   k = 0, …, T-2.
-    """
-    supra = np.zeros((T - 1, n, n))
-    for k in range(T - 1):
-        S, e      = scenario_func(k)
-        supra[k]  = np.eye(n) - np.diag(e) + c * S
-    return supra
-
-
-# ===========================================================================
-#  5. SPECTRAL METRICS
-# ===========================================================================
-
-def lambda_product(supra):
-    """
-    Temporal metapopulation capacity: ρ(∏ M_k)^{1/(T-1)}.
-    λ > 1 → persistence;  λ < 1 → extinction.
-
-    Power iteration with renormalisation avoids overflow/underflow for large T
-    or extreme parameter values (e.g. ρ^500 → ∞ without renormalisation).
-    Computes  exp((1/T) Σ_k log‖M_k v_k‖) = ρ(∏ M_k)^{1/T}.
-    """
-    n      = supra.shape[1]
-    T      = supra.shape[0]
-    v      = np.ones(n) / np.sqrt(n)
-    log_s  = 0.0
-    for M in supra:
-        v    = M @ v
-        nrm  = np.linalg.norm(v)
-        if nrm < 1e-300:
-            return 0.0
-        log_s += np.log(nrm)
-        v    /= nrm
-    return float(np.exp(log_s / T))
-
-
-def lambda_mean(supra):
-    """
-    Mean-matrix predictor: ρ(M̄).
-    Ignores temporal ordering; equivalent to replacing the landscape by its
-    time-average M̄ = (1/T) Σ M_k = I − diag(e) + c · S̄.
-    """
-    return float(np.max(np.abs(np.linalg.eigvals(np.mean(supra, axis=0)))))
-
-
-def lambda_product_shuffled(supra, n_shuffles=20, seed=0):
-    """
-    Average λ_product over random permutations of the matrix sequence.
-
-    Interpretation:
-      • λ_shuffled ≈ λ_product  → temporal order irrelevant (commuting regime)
-      • λ_shuffled ≠ λ_product  → sequence ordering/autocorrelation matters
-      • λ_shuffled → λ_mean     in the large-T i.i.d. limit
-
-    Decomposition:
-      λ_original − λ_shuffled  = effect of temporal autocorrelation
-      λ_shuffled  − λ_mean     = effect of matrix distribution (non-commutativity)
-    """
-    rng  = np.random.default_rng(seed)
-    idx  = np.arange(len(supra))
-    vals = []
-    for _ in range(n_shuffles):
-        rng.shuffle(idx)
-        vals.append(lambda_product(supra[idx]))
-    return float(np.mean(vals)), float(np.std(vals))
-
-
-def avg_commutator_norm(supra, subsample=50):
-    """
-    Non-commutativity measure: mean Frobenius norm of [M_k, M_{k+1}].
-    Note: [M_k, M_{k+1}] = c² [S_k, S_{k+1}]  → scales as c².
-    A subsample of consecutive pairs is used for efficiency.
-    """
-    T    = len(supra)
-    step = max(1, T // subsample)
-    norms = [
-        np.linalg.norm(supra[k] @ supra[k + 1] - supra[k + 1] @ supra[k], 'fro')
-        for k in range(0, T - 1, step)
-    ]
-    return float(np.mean(norms))
-
-
-# ===========================================================================
-#  6. PLOTTING HELPERS
-# ===========================================================================
-
-def add_duty_cycle_lines(ax, A_range, r_c,
-                          phi_levels=(0.1, 0.25, 0.5, 0.75),
-                          axis='x', color='white', lw=1.2, alpha=0.85, fontsize=7):
-    """
-    Overlay vertical (axis='x') or horizontal (axis='y') lines marking
-    the amplitudes A corresponding to given duty-cycle values φ.
-    Since φ depends only on A (not w), these are straight lines in (A, w) space.
-    """
+def add_duty_cycle_lines(ax, A_grid, r_c, phi_levels=(0.1, 0.25, 0.5, 0.75)):
+    """Vertical lines at the amplitudes A where the duty cycle equals φ (φ depends on A only)."""
     for phi in phi_levels:
         A_phi = amplitude_for_duty_cycle(phi, r_c)
-        if A_range[0] < A_phi < A_range[1]:
-            if axis == 'x':
-                ax.axvline(A_phi, color=color, ls=':', lw=lw, alpha=alpha)
-                ax.text(A_phi, ax.get_ylim()[1] * 0.97,
-                        f'φ={phi:.2f}', color=color, fontsize=fontsize,
-                        ha='center', va='top')
-            else:
-                ax.axhline(A_phi, color=color, ls=':', lw=lw, alpha=alpha)
-                ax.text(ax.get_xlim()[1] * 0.98, A_phi,
-                        f'φ={phi:.2f}', color=color, fontsize=fontsize,
-                        ha='right', va='bottom')
+        if A_grid[0] < A_phi < A_grid[-1]:
+            ax.axvline(A_phi, color='white', ls=':', lw=1.2, alpha=0.85)
+            ax.text(A_phi, ax.get_ylim()[1] * 0.95, f'φ={phi}',
+                    color='white', fontsize=6.5, ha='center', va='top')
 
 
 def phase_panel(ax, A_grid, wT_grid, values, title, cbar_label,
-                vmin=0.5, vmax=1.5, cmap='RdYlGn', r_c=None, A_c=None):
+                vmin=0.5, vmax=1.5, cmap='RdYlGn', A_c=None):
     """Reusable phase-diagram panel with persistence contour and A_c line."""
     im = ax.pcolormesh(A_grid, wT_grid, values,
                        cmap=cmap, vmin=vmin, vmax=vmax, shading='nearest')
@@ -285,7 +75,7 @@ def phase_panel(ax, A_grid, wT_grid, values, title, cbar_label,
 
 
 # ===========================================================================
-#  7. SHARED PARAMETERS
+#  SHARED PARAMETERS
 # ===========================================================================
 
 n      = 100
@@ -321,11 +111,10 @@ results_A = {}
 for w, label, color in zip(w_list, W_LABELS, COLORS):
     lp_arr, lm_arr, cn_arr = [], [], []
     for A in A_values:
-        scen  = make_sinusoidal_scenario(A, w, n, L, e_0, z, beta)
-        supra = build_supra(scen, n, c_base, T)
+        supra = make_supra(A, w, n, L, e_0, c_base, T)
         lp_arr.append(lambda_product(supra))
         lm_arr.append(lambda_mean(supra))
-        cn_arr.append(avg_commutator_norm(supra))
+        cn_arr.append(commutator_norm(supra))
     results_A[w] = (np.array(lp_arr), np.array(lm_arr), np.array(cn_arr))
     print(f"  {label} done")
 
@@ -356,7 +145,7 @@ axes[1].set_title('Gap: temporal product minus mean predictor', fontsize=11)
 axes[2].set_title('Non-commutativity of transition matrices', fontsize=11)
 
 plt.tight_layout()
-plt.savefig('fig1_amplitude_effect.pdf', bbox_inches='tight')
+savefig('fig1_amplitude_effect.pdf')
 plt.show()
 print()
 
@@ -374,8 +163,7 @@ results_w = {}
 for A, label in zip(A_list, A_labels):
     lp_arr, lm_arr = [], []
     for w in w_values:
-        scen  = make_sinusoidal_scenario(A, w, n, L, e_0, z, beta)
-        supra = build_supra(scen, n, c_base, T)
+        supra = make_supra(A, w, n, L, e_0, c_base, T)
         lp_arr.append(lambda_product(supra))
         lm_arr.append(lambda_mean(supra))
     results_w[A] = (np.array(lp_arr), np.array(lm_arr))
@@ -406,7 +194,7 @@ ax1.set_ylabel('$λ_{product} − λ_{mean}$', fontsize=11)
 ax1.set_title('Gap: Product minus Mean predictor', fontsize=11)
 
 plt.tight_layout()
-plt.savefig('fig2_frequency_effect.pdf', bbox_inches='tight')
+savefig('fig2_frequency_effect.pdf')
 plt.show()
 print()
 
@@ -426,18 +214,16 @@ e0_values = np.linspace(1e-4, 0.008, 25)
 
 lp_c, lm_c, cn_c = [], [], []
 for c in c_values:
-    scen  = make_sinusoidal_scenario(A_fixed, w_fixed, n, L, e_0, z, beta)
-    supra = build_supra(scen, n, c, T)
+    supra = make_supra(A_fixed, w_fixed, n, L, e_0, c, T)
     lp_c.append(lambda_product(supra))
     lm_c.append(lambda_mean(supra))
-    cn_c.append(avg_commutator_norm(supra))
+    cn_c.append(commutator_norm(supra))
 lp_c, lm_c, cn_c = map(np.array, [lp_c, lm_c, cn_c])
 print("  c scan done")
 
 lp_e, lm_e = [], []
 for e in e0_values:
-    scen  = make_sinusoidal_scenario(A_fixed, w_fixed, n, L, e, z, beta)
-    supra = build_supra(scen, n, c_base, T)
+    supra = make_supra(A_fixed, w_fixed, n, L, e, c_base, T)
     lp_e.append(lambda_product(supra))
     lm_e.append(lambda_mean(supra))
 lp_e, lm_e = map(np.array, [lp_e, lm_e])
@@ -470,7 +256,7 @@ for row, (xvals, lp, lm, xlabel, clr) in enumerate([
     axes[row, 1].grid(True, alpha=0.3)
 
 axes[0, 1].annotate(
-    r'$[M_k, M_{k+1}] = c^2 [S_k, S_{k+1}]$' '\n' r'$\Rightarrow$ gap $\sim c^2$',
+    r'$[M_k, M_{k+1}] = c^2 [S_k^\top, S_{k+1}^\top]$' '\n' r'(gap $\sim c^2$: hypothesis to test)',
     xy=(0.04, 0.82), xycoords='axes fraction', fontsize=10,
     bbox=dict(boxstyle='round', fc='wheat', alpha=0.8)
 )
@@ -496,7 +282,7 @@ axes[1, 2].set_title('Gap vs Extinction rate', fontsize=11)
 axes[1, 2].grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig('fig3_process_effects.pdf', bbox_inches='tight')
+savefig('fig3_process_effects.pdf')
 plt.show()
 print()
 
@@ -528,17 +314,12 @@ lm_mat = np.zeros_like(lp_mat)
 
 for i, w_val in enumerate(w_grid_ph):
     for j, A_val in enumerate(A_grid_ph):
-        scen          = make_sinusoidal_scenario(A_val, w_val, n_ph, L_ph, e_0, z, beta, seed=40)
-        supra         = build_supra(scen, n_ph, c_base, T_ph)
+        supra         = make_supra(A_val, w_val, n_ph, L_ph, e_0, c_base, T_ph)
         lp_mat[i, j]  = lambda_product(supra)
         lm_mat[i, j]  = lambda_mean(supra)
     print(f"  w row {i+1}/{len(w_grid_ph)} done")
 
 agreement = (lp_mat > 1).astype(int) + 2 * (lm_mat > 1).astype(int)
-
-# Duty-cycle values for isocline overlay
-phi_iso   = [0.1, 0.25, 0.5, 0.75]
-A_iso     = [amplitude_for_duty_cycle(p, r_c_ph) for p in phi_iso]
 
 cmap_agree = ListedColormap(['#d73027', '#fc8d59', '#91cf60', '#1a9641'])
 
@@ -549,15 +330,13 @@ fig4.suptitle(
     fontsize=12
 )
 
-kw = dict(shading='nearest')
-
-phase_panel(axes[0], A_grid_ph, wT_ph, lp_mat, r'$\lambda_{product}$  (true predictor)',
-            r'$\lambda_{product}$', r_c=r_c_ph, A_c=A_c_ph)
+phase_panel(axes[0], A_grid_ph, wT_ph, lp_mat, r'$\lambda_{product}$  (exact predictor)',
+            r'$\lambda_{product}$', A_c=A_c_ph)
 phase_panel(axes[1], A_grid_ph, wT_ph, lm_mat, r'$\lambda_{mean}$  (naive predictor)',
-            r'$\lambda_{mean}$', r_c=r_c_ph, A_c=A_c_ph)
+            r'$\lambda_{mean}$', A_c=A_c_ph)
 
 im2 = axes[2].pcolormesh(A_grid_ph, wT_ph, agreement,
-                          cmap=cmap_agree, vmin=-0.5, vmax=3.5, **kw)
+                          cmap=cmap_agree, vmin=-0.5, vmax=3.5, shading='nearest')
 axes[2].contour(A_grid_ph, wT_ph, lp_mat, levels=[1.0], colors='k', linewidths=2, linestyles='-')
 axes[2].contour(A_grid_ph, wT_ph, lm_mat, levels=[1.0], colors='k', linewidths=1.2, linestyles='--')
 axes[2].axvline(A_c_ph, color='royalblue', ls='--', lw=2, label=f'$A_c$={A_c_ph:.2f}')
@@ -569,38 +348,33 @@ axes[2].set_title('Prediction agreement  (— $λ_{prod}$=1,  – – $λ_{mean}
 
 # Overlay duty-cycle isoclines on all panels
 for ax in axes:
-    for phi, A_phi in zip(phi_iso, A_iso):
-        if A_grid_ph[0] < A_phi < A_grid_ph[-1]:
-            ax.axvline(A_phi, color='white', ls=':', lw=1.2, alpha=0.85)
-            ax.text(A_phi, wT_ph[-1] * 0.95, f'φ={phi}',
-                    color='white', fontsize=6.5, ha='center', va='top')
+    add_duty_cycle_lines(ax, A_grid_ph, r_c_ph)
     ax.set_xlabel('Amplitude $A$', fontsize=11)
     ax.set_ylabel('Oscillation cycles $(w·T)$', fontsize=10)
 
 plt.tight_layout()
-plt.savefig('fig4_phase_diagram.pdf', bbox_inches='tight')
+savefig('fig4_phase_diagram.pdf')
 plt.show()
 print()
 
 
 # ===========================================================================
 #  EXP 5 — Three demographic regimes: fast / intermediate / slow
-#  Regime defined by  max(c, e_i) / w  where  e_i = e_0 · n.
-#  Fast : max(c,e_i) >> w,   Slow : max(c,e_i) << w.
-#  Three panels show (A, w·T) phase diagram for λ_product, each at different (c, e_0).
+#  c and e_i = e_0·n are scaled together (c/e_i = 20 in all regimes, n = 50), so only the
+#  demographic time scale changes relative to w.
+#  Caveat: S_ji = A_j^β·1(d < r) with A_j = 1/n, so the effective colonisation rate
+#  of a patch is c·⟨k⟩/n (⟨k⟩ = mean degree), not c: the labels below compare c to w
+#  and overestimate the speed of demography.
 # ===========================================================================
 
 print("Exp 5: three regime phase diagrams …")
 
 REGIMES = {
-    'Fast\n$\\max(c,e_i) \\gg w$':  dict(c=2.0,  e_0=0.002),   # e_i = 0.2, max=2.0
-    'Intermediate\n$\\max(c,e_i) \\sim w$': dict(c=0.2,  e_0=0.0002),  # e_i = 0.02, max=0.2
-    'Slow\n$\\max(c,e_i) \\ll w$':  dict(c=0.02, e_0=2e-5),    # e_i = 0.002, max=0.02
+    'Fast\n$\\max(c,e_i) \\gg w$':  dict(c=2.0,  e_0=0.002),          # e_i = 0.1
+    'Intermediate\n$\\max(c,e_i) \\sim w$': dict(c=0.2,  e_0=0.0002),  # e_i = 0.01
+    'Slow\n$\\max(c,e_i) \\ll w$':  dict(c=0.02, e_0=2e-5),            # e_i = 0.001
 }
-# For w_max = 15/200 = 0.075:
-#   Fast: max/w_max = 2/0.075 ≈ 27  (fast ✓)
-#   Intermediate: 0.2/0.075 ≈ 2.7  (borderline)
-#   Slow: 0.02/0.075 ≈ 0.27 (slow ✓)
+# For w_max = 15/200 = 0.075:  c/w_max ≈ 27 (fast), 2.7 (borderline), 0.27 (slow)
 
 fig5, axes = plt.subplots(1, 3, figsize=(17, 5))
 fig5.suptitle(
@@ -613,28 +387,22 @@ for ax, (regime_label, params) in zip(axes, REGIMES.items()):
     lp_reg = np.zeros((len(w_grid_ph), len(A_grid_ph)))
     c_r    = params['c']
     e0_r   = params['e_0']
-    ei_r   = e0_r * n_ph        # effective extinction rate per patch
+    ei_r   = e0_r * n_ph        # extinction rate per patch (unit areas: A_i = 1/n)
     for i, w_val in enumerate(w_grid_ph):
         for j, A_val in enumerate(A_grid_ph):
-            scen         = make_sinusoidal_scenario(A_val, w_val, n_ph, L_ph, e0_r, z, beta, seed=40)
-            supra        = build_supra(scen, n_ph, c_r, T_ph)
+            supra        = make_supra(A_val, w_val, n_ph, L_ph, e0_r, c_r, T_ph)
             lp_reg[i, j] = lambda_product(supra)
 
     phase_panel(ax, A_grid_ph, wT_ph, lp_reg,
                 f'{regime_label}\n$c$={c_r}, $e_i$={ei_r:.3f}',
-                r'$\lambda_{product}$', r_c=r_c_ph, A_c=A_c_ph)
+                r'$\lambda_{product}$', A_c=A_c_ph)
 
-    # Duty-cycle isoclines
-    for phi, A_phi in zip(phi_iso, A_iso):
-        if A_grid_ph[0] < A_phi < A_grid_ph[-1]:
-            ax.axvline(A_phi, color='white', ls=':', lw=1.2, alpha=0.85)
-            ax.text(A_phi, wT_ph[-1] * 0.95, f'φ={phi}',
-                    color='white', fontsize=6.5, ha='center', va='top')
+    add_duty_cycle_lines(ax, A_grid_ph, r_c_ph)
 
     print(f"  {regime_label.split(chr(10))[0]} done")
 
 plt.tight_layout()
-plt.savefig('fig5_regimes.pdf', bbox_inches='tight')
+savefig('fig5_regimes.pdf')
 plt.show()
 print()
 
@@ -664,14 +432,10 @@ for w, label in zip(w_shape_list, w_shape_labels):
     dc_sin, dc_sq = [], []
     for A in A_shape:
         # Sinusoidal
-        scen_sin  = make_sinusoidal_scenario(A, w, n, L, e_0, z, beta)
-        supra_sin = build_supra(scen_sin, n, c_base, T)
-        lp_sin.append(lambda_product(supra_sin))
+        lp_sin.append(lambda_product(make_supra(A, w, n, L, e_0, c_base, T)))
 
         # Square wave: same mean r̄ = A/2 → phi_on=0.5, A_on=A
-        scen_sq  = make_squarewave_scenario(A, 0.5, w, n, L, e_0, z, beta)
-        supra_sq = build_supra(scen_sq, n, c_base, T)
-        lp_sq.append(lambda_product(supra_sq))
+        lp_sq.append(lambda_product(make_supra(A, w, n, L, e_0, c_base, T, shape='square')))
 
         # Analytical duty cycles (both have mean r̄ = A/2)
         dc_sin.append(duty_cycle(A, r_c))
@@ -718,7 +482,7 @@ for ax, w, label, color in zip(axes, w_shape_list, w_shape_labels, COLORS[:3]):
     ax.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig('fig6_shape_comparison.pdf', bbox_inches='tight')
+savefig('fig6_shape_comparison.pdf')
 plt.show()
 print()
 
@@ -740,11 +504,10 @@ results_rand = {}
 for w, label in zip(w_rand_list, w_rand_labels):
     lp_orig, lm_arr, lp_shuf, lp_shuf_std = [], [], [], []
     for A in A_rand:
-        scen  = make_sinusoidal_scenario(A, w, n, L, e_0, z, beta)
-        supra = build_supra(scen, n, c_base, T)
+        supra = make_supra(A, w, n, L, e_0, c_base, T)
         lp_orig.append(lambda_product(supra))
         lm_arr.append(lambda_mean(supra))
-        mu, sigma = lambda_product_shuffled(supra, n_shuffles=15, seed=42)
+        mu, sigma = lambda_shuffled(supra, n_shuffles=15, seed=42)
         lp_shuf.append(mu)
         lp_shuf_std.append(sigma)
     results_rand[w] = {
@@ -767,7 +530,7 @@ for col, (w, label, color) in enumerate(zip(w_rand_list, w_rand_labels, COLORS[:
 
     # Top row: λ values
     axes[0, col].plot(A_rand, lp, '-o',  color=color, ms=4, lw=2,   label='$λ_{product}$ (original order)')
-    axes[0, col].plot(A_rand, ls, '-^',  color=color, ms=4, lw=1.5, alpha=0.6, linestyle='-.', label='$λ_{shuffled}$ (random order)')
+    axes[0, col].plot(A_rand, ls, '-.^', color=color, ms=4, lw=1.5, alpha=0.6, label='$λ_{shuffled}$ (random order)')
     axes[0, col].plot(A_rand, lm, '--s', color='gray', ms=4, lw=1.5, alpha=0.7, label='$λ_{mean}$ (average landscape)')
     axes[0, col].fill_between(A_rand, ls - ss, ls + ss, color=color, alpha=0.12)
     axes[0, col].axhline(1, color='k', ls=':', lw=1)
@@ -795,7 +558,7 @@ for col, (w, label, color) in enumerate(zip(w_rand_list, w_rand_labels, COLORS[:
     axes[1, col].grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig('fig7_order_randomisation.pdf', bbox_inches='tight')
+savefig('fig7_order_randomisation.pdf')
 plt.show()
 
 print("\nAll experiments complete.  Figures saved as PDF.")
