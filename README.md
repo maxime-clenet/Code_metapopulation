@@ -37,7 +37,7 @@ experiments/
   temporal/              early scenarios: baseline, α(t), modularity, seasons, spectrum
   rgn/                   oscillating random geometric network: main results
 tests/                   checks of the library (pytest)
-figures/                 generated PDFs
+figures/                 generated figures (created on first run)
 ```
 
 ## Usage
