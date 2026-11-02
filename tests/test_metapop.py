@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from metapop import (amplitude_for_duty_cycle, build_supra, cyclic_mask, duty_cycle,
+from metapop import (amplitude_for_duty_cycle, build_supra, cyclic_schedule, duty_cycle,
                      lambda_mean, lambda_product, make_landscape, persistence_radius,
                      simulate, sinusoidal_radius, spectral_radius, static_lambda,
                      threshold_scenario, transition_matrix)
@@ -60,9 +60,9 @@ def test_duty_cycle_inverse():
         assert duty_cycle(amplitude_for_duty_cycle(phi, 2.0), 2.0) == pytest.approx(phi)
 
 
-def test_cyclic_mask_schedule():
+def test_cyclic_schedule():
     masks = ['a', 'b', 'c']
-    f = cyclic_mask(masks, [2, 1, 3])
+    f = cyclic_schedule(masks, [2, 1, 3])
     assert [f(k) for k in range(8)] == ['a', 'a', 'b', 'c', 'c', 'c', 'a', 'a']
 
 

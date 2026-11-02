@@ -6,7 +6,7 @@ Seasonal two-group landscape with unequal phases (200, 50, 200, 50):
 import matplotlib.pyplot as plt
 import numpy as np
 
-from metapop import (Landscape, build_supra, cyclic_mask, exponential_kernel, lambda_product,
+from metapop import (Landscape, build_supra, cyclic_schedule, exponential_kernel, lambda_product,
                      make_scenario, min_instantaneous_lambda, simulate, two_group_seasonal_masks)
 from metapop.plotting import plot_persistence_vs_c
 
@@ -32,7 +32,7 @@ land = Landscape(positions=None, areas=np.ones(n), distances=d)
 
 masks = two_group_seasonal_masks(n, p_11, p_12, p_21, p_22, seed=seed)
 scenario = make_scenario(land, e_0, z, beta, exponential_kernel(lambda k: alpha),
-                         cyclic_mask(masks, phase_durations))
+                         cyclic_schedule(masks, phase_durations))
 P0 = rng.random(n)
 
 lambdas, occupancy, worst = [], [], []

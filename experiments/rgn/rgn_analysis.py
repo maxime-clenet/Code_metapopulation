@@ -145,7 +145,7 @@ axes[1].set_title('Gap: temporal product minus mean predictor', fontsize=11)
 axes[2].set_title('Non-commutativity of transition matrices', fontsize=11)
 
 plt.tight_layout()
-savefig('fig1_amplitude_effect.pdf')
+savefig('fig1_amplitude_effect.png')
 plt.show()
 print()
 
@@ -194,7 +194,7 @@ ax1.set_ylabel('$λ_{product} − λ_{mean}$', fontsize=11)
 ax1.set_title('Gap: Product minus Mean predictor', fontsize=11)
 
 plt.tight_layout()
-savefig('fig2_frequency_effect.pdf')
+savefig('fig2_frequency_effect.png')
 plt.show()
 print()
 
@@ -282,7 +282,7 @@ axes[1, 2].set_title('Gap vs Extinction rate', fontsize=11)
 axes[1, 2].grid(True, alpha=0.3)
 
 plt.tight_layout()
-savefig('fig3_process_effects.pdf')
+savefig('fig3_process_effects.png')
 plt.show()
 print()
 
@@ -353,7 +353,7 @@ for ax in axes:
     ax.set_ylabel('Oscillation cycles $(w·T)$', fontsize=10)
 
 plt.tight_layout()
-savefig('fig4_phase_diagram.pdf')
+savefig('fig4_phase_diagram.png')
 plt.show()
 print()
 
@@ -402,7 +402,7 @@ for ax, (regime_label, params) in zip(axes, REGIMES.items()):
     print(f"  {regime_label.split(chr(10))[0]} done")
 
 plt.tight_layout()
-savefig('fig5_regimes.pdf')
+savefig('fig5_regimes.png')
 plt.show()
 print()
 
@@ -482,7 +482,7 @@ for ax, w, label, color in zip(axes, w_shape_list, w_shape_labels, COLORS[:3]):
     ax.grid(True, alpha=0.3)
 
 plt.tight_layout()
-savefig('fig6_shape_comparison.pdf')
+savefig('fig6_shape_comparison.png')
 plt.show()
 print()
 
@@ -558,7 +558,7 @@ for col, (w, label, color) in enumerate(zip(w_rand_list, w_rand_labels, COLORS[:
     axes[1, col].grid(True, alpha=0.3)
 
 plt.tight_layout()
-savefig('fig7_order_randomisation.pdf')
+savefig('fig7_order_randomisation.png')
 plt.show()
 
-print("\nAll experiments complete.  Figures saved as PDF.")
+print("\nAll experiments complete.  Figures saved as PNG.")

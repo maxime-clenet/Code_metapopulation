@@ -53,5 +53,5 @@ ax.set_title(r'Gap $\lambda(w{=}1/T) - \lambda(w{=}0)$'
              '\n(— temporal threshold,  -- static threshold $r_0 = r_p$)', fontsize=11)
 
 plt.tight_layout()
-savefig('fig_gap_phase_diagram.pdf')
+savefig('fig_gap_phase_diagram.png')
 plt.show()

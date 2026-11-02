@@ -10,7 +10,7 @@ FIG_DIR = Path(__file__).resolve().parent.parent / "figures"
 def savefig(name, fig=None):
     """Save to figures/<name> at the repository root."""
     FIG_DIR.mkdir(exist_ok=True)
-    (fig or plt.gcf()).savefig(FIG_DIR / name, bbox_inches='tight')
+    (fig or plt.gcf()).savefig(FIG_DIR / name, dpi=200, bbox_inches='tight')
 
 
 def plot_persistence_vs_c(ax, c_values, lambdas, occupancy=None, label='', color=None):

@@ -38,6 +38,11 @@ def lambda_mean(supra):
     return spectral_radius(supra.mean(axis=0))
 
 
+def lambda_adiabatic(supra):
+    """Geometric mean of the instantaneous ρ(M_k): exact for commuting (or slowly varying) M_k."""
+    return float(np.exp(np.mean([np.log(spectral_radius(M)) for M in supra])))
+
+
 def lambda_shuffled(supra, n_shuffles=20, seed=0):
     """
     Mean and std of λ_product over random permutations of the matrix sequence.

@@ -74,7 +74,7 @@ ax.set_ylabel(r'$\rho(M(r))$ — static spectral radius', fontsize=11)
 ax.set_title('Static metapopulation capacity vs connectivity radius', fontsize=12)
 ax.legend(fontsize=9); ax.grid(True, alpha=0.3)
 plt.tight_layout()
-savefig('fig0_static_lambda.pdf')
+savefig('fig0_static_lambda.png')
 plt.show()
 print()
 
@@ -155,7 +155,7 @@ axes[1].set_title(
 )
 
 plt.tight_layout()
-savefig('fig1_phase_diagram_r0_Ahalf.pdf')
+savefig('fig1_phase_diagram_r0_Ahalf.png')
 plt.show()
 print()
 
@@ -263,7 +263,7 @@ axes2[0].text(
 )
 
 plt.tight_layout()
-savefig('fig2_nonmonotone_rescue.pdf')
+savefig('fig2_nonmonotone_rescue.png')
 plt.show()
 print()
 
@@ -335,7 +335,7 @@ axes3[2].set_title('Rescue gain vs $r_0$\n(peaks where static is most sub-critic
 axes3[2].legend(fontsize=8); axes3[2].grid(True, alpha=0.3)
 
 plt.tight_layout()
-savefig('fig3_optimal_amplitude.pdf')
+savefig('fig3_optimal_amplitude.png')
 plt.show()
 
-print("\nAll figures saved as PDF.")
+print("\nAll figures saved as PNG.")

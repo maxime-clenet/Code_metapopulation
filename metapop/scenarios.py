@@ -98,13 +98,13 @@ def persistence_radius(landscape, c, e_0, z, beta, r_lo=0.1, r_hi=None):
 
 
 # ---------------------------------------------------------------------------
-#  Seasonal (piecewise-constant) masks
+#  Seasonal (piecewise-constant) schedules
 # ---------------------------------------------------------------------------
 
-def cyclic_mask(masks, durations):
-    """k -> masks[i], where phase i lasts durations[i] steps and the cycle repeats."""
+def cyclic_schedule(items, durations):
+    """k -> items[i], where phase i lasts durations[i] steps and the cycle repeats."""
     bounds = np.cumsum(durations)
-    return lambda k: masks[int(np.searchsorted(bounds, k % bounds[-1], side='right'))]
+    return lambda k: items[int(np.searchsorted(bounds, k % bounds[-1], side='right'))]
 
 
 def two_group_seasonal_masks(n, p_11, p_12, p_21, p_22, seed=42):
